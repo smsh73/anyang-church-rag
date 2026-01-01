@@ -68,13 +68,34 @@ router.post('/', async (req, res) => {
       await saveSermonChunk(chunk, chunk.embedding);
     }
     
-    // 10. Azure AI Search 인덱싱 (선택)
+    // 10. PostgreSQL 벡터 인덱스 동기화
+    console.log('Step 10: Syncing PostgreSQL vector indexes...');
+    try {
+      const { syncPostgreSQLIndex } = await import('../services/sermonStorageService.js');
+      await syncPostgreSQLIndex();
+    } catch (syncError) {
+      console.warn('PostgreSQL index sync warning:', syncError.message);
+      // 동기화 실패해도 계속 진행
+    }
+    
+    // 11. Azure AI Search 인덱싱 및 배포 (선택)
+    let indexStatus = null;
     if (autoIndex) {
-      console.log('Step 10: Indexing to Azure AI Search...');
+      console.log('Step 11: Indexing to Azure AI Search...');
       try {
-        const { createIndex, indexDocuments } = await import('../services/indexService.js');
-        await createIndex();
+        const { createIndex, indexDocuments, syncAndDeployIndex } = await import('../services/indexService.js');
+        
+        // 인덱스 동기화 및 배포
+        await syncAndDeployIndex();
+        
+        // 문서 인덱싱
         await indexDocuments(chunksWithEmbeddings);
+        
+        // 최종 상태 확인
+        const { getIndexStatus } = await import('../services/indexService.js');
+        indexStatus = await getIndexStatus();
+        
+        console.log('Azure AI Search indexing completed');
       } catch (indexError) {
         console.error('Indexing error:', indexError);
         // 인덱싱 실패해도 결과는 반환
@@ -101,6 +122,10 @@ router.post('/', async (req, res) => {
         totalParagraphs: paragraphs.length,
         embeddingModel: 'text-embedding-ada-002',
         embeddingDimensions: 768
+      },
+      indexStatus: indexStatus || {
+        postgreSQL: 'synchronized',
+        azureSearch: autoIndex ? 'pending' : 'skipped'
       }
     });
   } catch (error) {

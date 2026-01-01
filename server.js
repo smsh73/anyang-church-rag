@@ -11,6 +11,7 @@ import bibleRouter from './routes/bible.js';
 import podcastRouter from './routes/podcast.js';
 import imageRouter from './routes/image.js';
 import sermonRouter from './routes/sermon.js';
+import syncRouter from './routes/sync.js';
 import { initializeDatabase } from './config/database.js';
 
 dotenv.config();
@@ -38,6 +39,7 @@ app.use('/api/bible', bibleRouter);
 app.use('/api/podcast', podcastRouter);
 app.use('/api/image', imageRouter);
 app.use('/api/sermon', sermonRouter);
+app.use('/api/sync', syncRouter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -75,6 +77,10 @@ app.get('/', (req, res) => {
       },
       sermon: {
         search: 'POST /api/sermon/search'
+      },
+      sync: {
+        sync: 'POST /api/sync',
+        status: 'GET /api/sync/status'
       }
     }
   });

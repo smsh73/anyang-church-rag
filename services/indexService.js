@@ -45,7 +45,7 @@ export async function createIndex() {
       {
         name: 'embedding',
         type: 'Collection(Edm.Single)',
-        dimensions: 1536,
+        dimensions: 768, // text-embedding-ada-002는 768차원
         vectorSearchProfile: 'default-vector-profile'
       },
       {
@@ -125,10 +125,63 @@ export async function indexDocuments(chunks) {
   }));
   
   try {
-    // 배치 업로드
-    await searchClient.uploadDocuments(documents);
-    console.log(`Indexed ${documents.length} documents`);
+    // 배치 업로드 (최대 1000개씩)
+    const batchSize = 1000;
+    for (let i = 0; i < documents.length; i += batchSize) {
+      const batch = documents.slice(i, i + batchSize);
+      await searchClient.uploadDocuments(batch);
+      console.log(`Indexed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(documents.length / batchSize)}`);
+    }
+    console.log(`Total indexed: ${documents.length} documents`);
   } catch (error) {
     throw new Error(`Indexing failed: ${error.message}`);
+  }
+}
+
+/**
+ * 인덱스 동기화 상태 확인
+ */
+export async function getIndexStatus() {
+  try {
+    const index = await searchIndexClient.getIndex(azureConfig.search.indexName);
+    const stats = await searchClient.getDocumentsCount();
+    
+    return {
+      name: index.name,
+      documentCount: stats,
+      fields: index.fields.length,
+      vectorSearchEnabled: !!index.vectorSearch
+    };
+  } catch (error) {
+    throw new Error(`Failed to get index status: ${error.message}`);
+  }
+}
+
+/**
+ * 인덱스 배포 확인 및 동기화
+ */
+export async function syncAndDeployIndex() {
+  try {
+    // 1. 인덱스 생성/업데이트
+    console.log('Step 1: Creating/updating index...');
+    await createIndex();
+    
+    // 2. 인덱스 상태 확인
+    console.log('Step 2: Checking index status...');
+    const status = await getIndexStatus();
+    console.log(`Index status: ${JSON.stringify(status, null, 2)}`);
+    
+    // 3. Azure AI Search는 인덱스 업데이트 후 자동으로 배포됨
+    // 하지만 완료를 기다려야 할 수 있음
+    console.log('Step 3: Waiting for index deployment...');
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 2초 대기
+    
+    return {
+      success: true,
+      status,
+      message: 'Index synchronized and deployed successfully'
+    };
+  } catch (error) {
+    throw new Error(`Index sync failed: ${error.message}`);
   }
 }

@@ -84,3 +84,30 @@ export async function searchSermonChunks(queryEmbedding, options = {}) {
     client.release();
   }
 }
+
+/**
+ * PostgreSQL 벡터 인덱스 동기화 (REINDEX)
+ */
+export async function syncPostgreSQLIndex() {
+  const client = await pool.connect();
+  try {
+    console.log('Reindexing PostgreSQL vector indexes...');
+    
+    // 벡터 인덱스 재구성
+    await client.query('REINDEX INDEX CONCURRENTLY IF EXISTS sermon_chunks_embedding_idx');
+    await client.query('REINDEX INDEX CONCURRENTLY IF EXISTS bible_verses_embedding_idx');
+    
+    // 통계 정보 업데이트
+    await client.query('ANALYZE sermon_chunks');
+    await client.query('ANALYZE bible_verses');
+    
+    console.log('PostgreSQL indexes synchronized successfully');
+    return { success: true, message: 'PostgreSQL indexes synchronized' };
+  } catch (error) {
+    console.warn('PostgreSQL index sync warning:', error.message);
+    // REINDEX 실패해도 계속 진행
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+}
