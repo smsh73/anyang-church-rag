@@ -1,4 +1,4 @@
-import { fetchTranscript } from '@youtube-transcript/youtube-transcript';
+import { YoutubeTranscript } from 'youtube-transcript';
 import { extractVideoId, downloadAudio, cleanupTempFile } from '../utils/youtubeDownloader.js';
 import { transcribeAudio } from '../utils/whisperSTT.js';
 import { parseTimeToSeconds } from '../utils/timeParser.js';
@@ -20,7 +20,7 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
   
   try {
     // 먼저 자막 시도
-    const transcriptList = await fetchTranscript(videoId);
+    const transcriptList = await YoutubeTranscript.fetchTranscript(videoId);
     
     // 시간 구간 필터링
     transcript = transcriptList

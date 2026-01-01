@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 # package.json 복사 및 의존성 설치
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # 애플리케이션 코드 복사
 COPY . .
