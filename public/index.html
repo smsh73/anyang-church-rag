@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>안양제일교회 YouTube RAG 시스템 - 관리자</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>안양제일교회 YouTube RAG 시스템</h1>
+            <nav>
+                <button class="nav-btn active" data-page="embedding">벡터 임베딩</button>
+                <button class="nav-btn" data-page="settings">API 키 설정</button>
+                <button class="nav-btn" data-page="status">상태 확인</button>
+            </nav>
+        </header>
+
+        <!-- 벡터 임베딩 페이지 -->
+        <div id="embedding-page" class="page active">
+            <h2>벡터 임베딩 생성</h2>
+            <form id="embedding-form">
+                <div class="form-group">
+                    <label for="youtube-url">YouTube URL *</label>
+                    <input type="url" id="youtube-url" required 
+                           placeholder="https://www.youtube.com/watch?v=...">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="start-time">시작 시간</label>
+                        <input type="text" id="start-time" 
+                               placeholder="38:40 또는 1:14:40">
+                        <small>형식: MM:SS 또는 HH:MM:SS</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="end-time">종료 시간</label>
+                        <input type="text" id="end-time" 
+                               placeholder="1:14:40">
+                        <small>형식: MM:SS 또는 HH:MM:SS</small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="auto-index" checked>
+                        Azure AI Search에 자동 인덱싱
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="submit-btn">
+                    벡터 임베딩 생성
+                </button>
+            </form>
+
+            <div id="progress" class="progress hidden">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-text" id="progress-text">처리 중...</div>
+            </div>
+
+            <div id="result" class="result hidden"></div>
+        </div>
+
+        <!-- API 키 설정 페이지 -->
+        <div id="settings-page" class="page">
+            <h2>API 키 설정</h2>
+            
+            <div class="settings-section">
+                <h3>AI 서비스 API 키</h3>
+                <div id="api-keys-list"></div>
+                
+                <button class="btn btn-secondary" id="add-key-btn">새 API 키 추가</button>
+            </div>
+
+            <div id="add-key-modal" class="modal hidden">
+                <div class="modal-content">
+                    <span class="close">&times;</span>
+                    <h3>API 키 추가</h3>
+                    <form id="add-key-form">
+                        <div class="form-group">
+                            <label for="key-provider">서비스 *</label>
+                            <select id="key-provider" required>
+                                <option value="">선택하세요</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="claude">Claude (Anthropic)</option>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="perplexity">Perplexity</option>
+                                <option value="elevenlabs">ElevenLabs</option>
+                                <option value="nanobanana">Nano Banana Pro</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="key-name">이름 (선택)</label>
+                            <input type="text" id="key-name" 
+                                   placeholder="예: main-key, backup-key">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="key-value">API 키 *</label>
+                            <input type="password" id="key-value" required 
+                                   placeholder="sk-... 또는 api key">
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">저장</button>
+                            <button type="button" class="btn btn-secondary" id="cancel-add-key">취소</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 상태 확인 페이지 -->
+        <div id="status-page" class="page">
+            <h2>시스템 상태</h2>
+            
+            <div class="status-section">
+                <h3>인덱스 상태</h3>
+                <button class="btn btn-primary" id="check-status-btn">상태 확인</button>
+                <div id="status-result" class="result hidden"></div>
+            </div>
+
+            <div class="status-section">
+                <h3>인덱스 동기화</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="radio" name="sync-target" value="all" checked>
+                        전체 동기화
+                    </label>
+                    <label>
+                        <input type="radio" name="sync-target" value="postgresql">
+                        PostgreSQL만
+                    </label>
+                    <label>
+                        <input type="radio" name="sync-target" value="azure">
+                        Azure AI Search만
+                    </label>
+                </div>
+                <button class="btn btn-primary" id="sync-btn">동기화 실행</button>
+                <div id="sync-result" class="result hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

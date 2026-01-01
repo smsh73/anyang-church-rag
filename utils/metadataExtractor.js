@@ -6,8 +6,10 @@ import { youtubeConfig } from '../config/youtubeConfig.js';
  * @returns {Promise<Object>} 비디오 정보
  */
 async function getVideoInfo(videoId) {
+  // YouTube API 키는 선택사항입니다.
+  // API 키가 없어도 제목에서 메타데이터를 파싱할 수 있습니다.
   if (!youtubeConfig.apiKey) {
-    // API 키가 없으면 기본 정보만 반환
+    console.log('YouTube API key not set. Metadata will be extracted from URL/title only.');
     return {
       title: '',
       publishedAt: null
@@ -29,6 +31,7 @@ async function getVideoInfo(videoId) {
     }
   } catch (error) {
     console.error('Failed to fetch video info:', error);
+    // API 호출 실패해도 계속 진행 (제목 파싱으로 대체)
   }
   
   return {

@@ -23,6 +23,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// 정적 파일 서빙 (프론트엔드)
+app.use(express.static('public'));
+
 // 데이터베이스 초기화
 initializeDatabase().catch(err => {
   console.error('Database initialization failed:', err);
