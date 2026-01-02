@@ -15,6 +15,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Query is required' });
     }
     
+    if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_API_KEY) {
+      return res.status(400).json({ 
+        error: 'Azure Search is not configured. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.' 
+      });
+    }
+    
     const results = await hybridSearch(query, {
       serviceType,
       serviceDateFrom,
@@ -45,6 +51,12 @@ router.post('/rag', async (req, res) => {
     
     if (!query) {
       return res.status(400).json({ error: 'Query is required' });
+    }
+    
+    if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_API_KEY) {
+      return res.status(400).json({ 
+        error: 'Azure Search is not configured. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.' 
+      });
     }
     
     const answer = await ragQuery(query, {

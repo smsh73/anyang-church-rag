@@ -1,21 +1,42 @@
 import { SearchClient, SearchIndexClient, AzureKeyCredential } from '@azure/search-documents';
 import { azureConfig } from '../config/azureConfig.js';
 
-const searchIndexClient = new SearchIndexClient(
-  azureConfig.search.endpoint,
-  new AzureKeyCredential(azureConfig.search.apiKey)
-);
+// 지연 초기화를 위한 클라이언트 변수
+let searchIndexClient = null;
+let searchClient = null;
 
-const searchClient = new SearchClient(
-  azureConfig.search.endpoint,
-  azureConfig.search.indexName,
-  new AzureKeyCredential(azureConfig.search.apiKey)
-);
+/**
+ * Azure Search 클라이언트 초기화 (지연 로딩)
+ */
+function initializeClients() {
+  if (!azureConfig.search.endpoint || !azureConfig.search.apiKey) {
+    throw new Error('Azure Search configuration is missing. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.');
+  }
+  
+  if (!searchIndexClient) {
+    searchIndexClient = new SearchIndexClient(
+      azureConfig.search.endpoint,
+      new AzureKeyCredential(azureConfig.search.apiKey)
+    );
+  }
+  
+  if (!searchClient) {
+    searchClient = new SearchClient(
+      azureConfig.search.endpoint,
+      azureConfig.search.indexName,
+      new AzureKeyCredential(azureConfig.search.apiKey)
+    );
+  }
+  
+  return { searchIndexClient, searchClient };
+}
 
 /**
  * 인덱스 생성
  */
 export async function createIndex() {
+  const { searchIndexClient } = initializeClients();
+  
   const indexDefinition = {
     name: azureConfig.search.indexName,
     fields: [
@@ -110,6 +131,8 @@ export async function createIndex() {
  * @param {Array} chunks - 청크 배열 (임베딩 포함)
  */
 export async function indexDocuments(chunks) {
+  const { searchClient } = initializeClients();
+  
   const documents = chunks.map(chunk => ({
     id: chunk.id,
     videoId: chunk.metadata.videoId,
@@ -143,6 +166,8 @@ export async function indexDocuments(chunks) {
  */
 export async function getIndexStatus() {
   try {
+    const { searchIndexClient, searchClient } = initializeClients();
+    
     const index = await searchIndexClient.getIndex(azureConfig.search.indexName);
     const stats = await searchClient.getDocumentsCount();
     

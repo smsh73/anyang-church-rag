@@ -28,10 +28,17 @@ router.post('/', async (req, res) => {
     
     // Azure AI Search 인덱스 동기화 및 배포
     if (!target || target === 'azure' || target === 'all') {
-      try {
-        results.azureSearch = await syncAndDeployIndex();
-      } catch (error) {
-        results.azureSearch = { success: false, error: error.message };
+      if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_API_KEY) {
+        results.azureSearch = { 
+          success: false, 
+          error: 'Azure Search is not configured. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.' 
+        };
+      } else {
+        try {
+          results.azureSearch = await syncAndDeployIndex();
+        } catch (error) {
+          results.azureSearch = { success: false, error: error.message };
+        }
       }
     }
     
@@ -61,10 +68,16 @@ router.get('/status', async (req, res) => {
     };
     
     // Azure AI Search 상태 확인
-    try {
-      status.azureSearch = await getIndexStatus();
-    } catch (error) {
-      status.azureSearch = { error: error.message };
+    if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_API_KEY) {
+      status.azureSearch = { 
+        error: 'Azure Search is not configured. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.' 
+      };
+    } else {
+      try {
+        status.azureSearch = await getIndexStatus();
+      } catch (error) {
+        status.azureSearch = { error: error.message };
+      }
     }
     
     res.json({

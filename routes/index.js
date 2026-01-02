@@ -15,6 +15,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Chunks array is required' });
     }
     
+    // Azure Search 설정 확인
+    if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_API_KEY) {
+      return res.status(400).json({ 
+        error: 'Azure Search is not configured. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.' 
+      });
+    }
+    
     // 인덱스 생성 (없으면)
     try {
       await createIndex();

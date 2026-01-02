@@ -2,16 +2,46 @@ import { SearchClient, AzureKeyCredential } from '@azure/search-documents';
 import { OpenAIClient } from '@azure/openai';
 import { azureConfig } from '../config/azureConfig.js';
 
-const searchClient = new SearchClient(
-  azureConfig.search.endpoint,
-  azureConfig.search.indexName,
-  new AzureKeyCredential(azureConfig.search.apiKey)
-);
+// 지연 초기화를 위한 클라이언트 변수
+let searchClient = null;
+let openaiClient = null;
 
-const openaiClient = new OpenAIClient(
-  azureConfig.openai.endpoint,
-  { apiKey: azureConfig.openai.apiKey }
-);
+/**
+ * Azure Search 클라이언트 초기화 (지연 로딩)
+ */
+function initializeSearchClient() {
+  if (!azureConfig.search.endpoint || !azureConfig.search.apiKey) {
+    throw new Error('Azure Search configuration is missing. Please set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY environment variables.');
+  }
+  
+  if (!searchClient) {
+    searchClient = new SearchClient(
+      azureConfig.search.endpoint,
+      azureConfig.search.indexName,
+      new AzureKeyCredential(azureConfig.search.apiKey)
+    );
+  }
+  
+  return searchClient;
+}
+
+/**
+ * Azure OpenAI 클라이언트 초기화 (지연 로딩)
+ */
+function initializeOpenAIClient() {
+  if (!azureConfig.openai.endpoint || !azureConfig.openai.apiKey) {
+    throw new Error('Azure OpenAI configuration is missing. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY environment variables.');
+  }
+  
+  if (!openaiClient) {
+    openaiClient = new OpenAIClient(
+      azureConfig.openai.endpoint,
+      { apiKey: azureConfig.openai.apiKey }
+    );
+  }
+  
+  return openaiClient;
+}
 
 /**
  * 하이브리드 검색 (키워드 + 벡터)
@@ -29,6 +59,7 @@ export async function hybridSearch(query, options = {}) {
   } = options;
   
   // 쿼리 임베딩 생성
+  const openaiClient = initializeOpenAIClient();
   const queryEmbedding = await openaiClient.getEmbeddings(
     azureConfig.openai.embeddingDeployment,
     [query]
@@ -75,6 +106,7 @@ export async function hybridSearch(query, options = {}) {
     };
   }
   
+  const searchClient = initializeSearchClient();
   const searchResults = await searchClient.search(query, searchOptions);
   
   const results = [];
@@ -127,6 +159,7 @@ ${context}
 답변:`;
   
   try {
+    const openaiClient = initializeOpenAIClient();
     const response = await openaiClient.getChatCompletions(
       azureConfig.openai.gptDeployment,
       [
