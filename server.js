@@ -26,9 +26,11 @@ app.use(express.json());
 // 정적 파일 서빙 (프론트엔드)
 app.use(express.static('public'));
 
-// 데이터베이스 초기화
+// 데이터베이스 초기화 (비동기, 실패해도 서버는 계속 실행)
 initializeDatabase().catch(err => {
-  console.error('Database initialization failed:', err);
+  console.error('Database initialization failed:', err.message);
+  console.warn('Server will continue running, but database features will be unavailable.');
+  console.warn('To enable database features, configure PostgreSQL connection settings.');
 });
 
 // 라우트

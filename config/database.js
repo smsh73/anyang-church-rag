@@ -5,21 +5,44 @@ dotenv.config();
 
 const { Pool } = pg;
 
-export const pool = new Pool({
+// PostgreSQL 연결 설정
+const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
+  port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'anyang_church',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+  connectionTimeoutMillis: 10000, // Azure에서 연결 시간 증가
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+};
+
+// 연결 문자열이 있으면 우선 사용 (Azure Database for PostgreSQL 등)
+if (process.env.DATABASE_URL) {
+  const url = new URL(process.env.DATABASE_URL);
+  dbConfig.host = url.hostname;
+  dbConfig.port = parseInt(url.port || '5432');
+  dbConfig.database = url.pathname.slice(1);
+  dbConfig.user = url.username;
+  dbConfig.password = url.password;
+  dbConfig.ssl = { rejectUnauthorized: false };
+}
+
+export const pool = new Pool(dbConfig);
 
 // 테이블 초기화
 export async function initializeDatabase() {
-  const client = await pool.connect();
+  // 데이터베이스 연결 정보 확인
+  if (!process.env.DB_HOST && !process.env.DATABASE_URL) {
+    console.warn('⚠️  Database configuration not found. Database features will be disabled.');
+    console.warn('   Please set DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD or DATABASE_URL environment variables.');
+    return;
+  }
+
+  let client;
   try {
+    client = await pool.connect();
     // pgvector 확장 활성화
     await client.query('CREATE EXTENSION IF NOT EXISTS vector');
     
@@ -95,11 +118,22 @@ export async function initializeDatabase() {
       WITH (lists = 100)
     `);
 
-    console.log('Database initialized successfully');
+    console.log('✅ Database initialized successfully');
   } catch (error) {
-    console.error('Database initialization error:', error);
+    console.error('❌ Database initialization error:', error.message);
+    console.error('   Connection details:', {
+      host: dbConfig.host,
+      port: dbConfig.port,
+      database: dbConfig.database,
+      user: dbConfig.user,
+      ssl: !!dbConfig.ssl
+    });
+    // 데이터베이스 초기화 실패해도 서버는 계속 실행
+    console.warn('⚠️  Server will continue without database. Some features may be unavailable.');
     throw error;
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
