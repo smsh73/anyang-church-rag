@@ -81,24 +81,30 @@ router.post('/', async (req, res) => {
     // 11. Azure AI Search 인덱싱 및 배포 (선택)
     let indexStatus = null;
     if (autoIndex) {
-      console.log('Step 11: Indexing to Azure AI Search...');
-      try {
-        const { createIndex, indexDocuments, syncAndDeployIndex } = await import('../services/indexService.js');
-        
-        // 인덱스 동기화 및 배포
-        await syncAndDeployIndex();
-        
-        // 문서 인덱싱
-        await indexDocuments(chunksWithEmbeddings);
-        
-        // 최종 상태 확인
-        const { getIndexStatus } = await import('../services/indexService.js');
-        indexStatus = await getIndexStatus();
-        
-        console.log('Azure AI Search indexing completed');
-      } catch (indexError) {
-        console.error('Indexing error:', indexError);
-        // 인덱싱 실패해도 결과는 반환
+      if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_API_KEY) {
+        console.log('Step 11: Azure AI Search not configured, skipping...');
+        indexStatus = { error: 'Azure Search not configured' };
+      } else {
+        console.log('Step 11: Indexing to Azure AI Search...');
+        try {
+          const { createIndex, indexDocuments, syncAndDeployIndex } = await import('../services/indexService.js');
+          
+          // 인덱스 동기화 및 배포
+          await syncAndDeployIndex();
+          
+          // 문서 인덱싱
+          await indexDocuments(chunksWithEmbeddings);
+          
+          // 최종 상태 확인
+          const { getIndexStatus } = await import('../services/indexService.js');
+          indexStatus = await getIndexStatus();
+          
+          console.log('Azure AI Search indexing completed');
+        } catch (indexError) {
+          console.error('Indexing error:', indexError);
+          indexStatus = { error: indexError.message };
+          // 인덱싱 실패해도 결과는 반환
+        }
       }
     }
     
