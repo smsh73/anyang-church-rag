@@ -4,8 +4,20 @@ import { getApiKey } from './aiKeyManager.js';
 
 let client;
 
-function getOpenAIClient() {
-  // Azure OpenAI 설정이 있으면 우선 사용
+async function getOpenAIClient() {
+  // 저장된 OpenAI API 키를 우선 사용
+  const apiKeyData = await getApiKey('openai');
+  if (apiKeyData && apiKeyData.api_key) {
+    // 일반 OpenAI 사용 (우선순위 1)
+    const OpenAI = (await import('openai')).default;
+    return { 
+      client: new OpenAI({ apiKey: apiKeyData.api_key }),
+      isAzure: false,
+      isOpenAI: true
+    };
+  }
+  
+  // OpenAI API 키가 없으면 Azure OpenAI 사용 (fallback)
   if (azureConfig.openai.endpoint && azureConfig.openai.apiKey) {
     if (!client) {
       client = new OpenAIClient(
@@ -13,11 +25,11 @@ function getOpenAIClient() {
         new AzureKeyCredential(azureConfig.openai.apiKey)
       );
     }
-    return { client, isAzure: true };
+    return { client, isAzure: true, isOpenAI: false };
   }
   
-  // Azure 설정이 없으면 저장된 API 키 사용
-  return { client: null, isAzure: false };
+  // 둘 다 없으면 에러
+  throw new Error('OpenAI API key not found. Please add OpenAI API key in settings or configure Azure OpenAI.');
 }
 
 /**
@@ -35,24 +47,12 @@ export async function generateEmbeddings(chunks) {
     throw new Error('Some chunks have empty text');
   }
 
-  const { client: openaiClient, isAzure } = getOpenAIClient();
-  const deploymentName = azureConfig.openai.embeddingDeployment || 'text-embedding-ada-002';
+  const { client: openaiClient, isAzure, isOpenAI } = await getOpenAIClient();
   
-  if (!openaiClient && !isAzure) {
-    // Azure 설정이 없으면 저장된 API 키로 시도
-    const apiKeyData = await getApiKey('openai');
-    if (!apiKeyData) {
-      throw new Error('OpenAI API key not found. Please configure Azure OpenAI or add OpenAI API key in settings.');
-    }
-    
-    // 일반 OpenAI 사용 (fallback)
-    const OpenAI = (await import('openai')).default;
-    const openai = new OpenAI({
-      apiKey: apiKeyData.api_key
-    });
-    
+  // 일반 OpenAI 사용 (우선순위 1)
+  if (isOpenAI && openaiClient) {
     try {
-      const response = await openai.embeddings.create({
+      const response = await openaiClient.embeddings.create({
         model: 'text-embedding-ada-002',
         input: texts
       });
@@ -63,35 +63,40 @@ export async function generateEmbeddings(chunks) {
       }));
     } catch (error) {
       console.warn('Batch embedding failed, processing individually:', error.message);
-      return await processEmbeddingsIndividually(chunks, texts, openai, 'text-embedding-ada-002');
+      return await processEmbeddingsIndividually(chunks, texts, openaiClient, 'text-embedding-ada-002');
     }
   }
   
-  // Azure OpenAI 사용
-  try {
-    const response = await openaiClient.getEmbeddings(deploymentName, texts);
-    
-    return chunks.map((chunk, index) => ({
-      ...chunk,
-      embedding: response.data[index].embedding
-    }));
-  } catch (error) {
-    console.warn('Batch embedding failed, processing individually:', error.message);
-    const results = [];
-    for (let i = 0; i < chunks.length; i++) {
-      try {
-        const response = await openaiClient.getEmbeddings(deploymentName, [chunks[i].fullText || chunks[i].chunkText]);
-        results.push({
-          ...chunks[i],
-          embedding: response.data[0].embedding
-        });
-      } catch (err) {
-        console.error(`Embedding generation failed for chunk ${i}:`, err.message);
-        throw new Error(`Embedding generation failed for chunk ${i}: ${err.message}`);
+  // Azure OpenAI 사용 (fallback)
+  if (isAzure && openaiClient) {
+    const deploymentName = azureConfig.openai.embeddingDeployment || 'text-embedding-ada-002';
+    try {
+      const response = await openaiClient.getEmbeddings(deploymentName, texts);
+      
+      return chunks.map((chunk, index) => ({
+        ...chunk,
+        embedding: response.data[index].embedding
+      }));
+    } catch (error) {
+      console.warn('Batch embedding failed, processing individually:', error.message);
+      const results = [];
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          const response = await openaiClient.getEmbeddings(deploymentName, [chunks[i].fullText || chunks[i].chunkText]);
+          results.push({
+            ...chunks[i],
+            embedding: response.data[0].embedding
+          });
+        } catch (err) {
+          console.error(`Embedding generation failed for chunk ${i}:`, err.message);
+          throw new Error(`Embedding generation failed for chunk ${i}: ${err.message}`);
+        }
       }
+      return results;
     }
-    return results;
   }
+  
+  throw new Error('No OpenAI client available');
 }
 
 /**
