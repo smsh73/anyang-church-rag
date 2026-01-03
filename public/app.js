@@ -78,12 +78,33 @@ document.getElementById('embedding-form').addEventListener('submit', async (e) =
         });
         
         clearInterval(progressInterval);
+        
+        // 응답이 성공인지 먼저 확인
+        if (!response.ok) {
+            // 에러 응답 처리
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+                // JSON 파싱 실패 시 텍스트로 읽기 시도
+                try {
+                    const text = await response.text();
+                    if (text) errorMessage = text;
+                } catch (e2) {
+                    // 텍스트도 읽을 수 없으면 기본 메시지 사용
+                }
+            }
+            throw new Error(errorMessage);
+        }
+        
+        // 성공 응답만 JSON 파싱
+        const data = await response.json();
+        
         progressFill.style.width = '100%';
         progressText.textContent = '완료!';
         
-        const data = await response.json();
-        
-        if (response.ok) {
+        if (data.success) {
             result.classList.remove('hidden');
             result.className = 'result success';
             result.innerHTML = `
@@ -105,16 +126,20 @@ document.getElementById('embedding-form').addEventListener('submit', async (e) =
                 </details>
             `;
         } else {
-            throw new Error(data.error || '요청 실패');
+            throw new Error(data.error || '처리 실패');
         }
     } catch (error) {
         clearInterval(progressInterval);
+        progressFill.style.width = '0%';
+        progressText.textContent = '오류 발생';
         result.classList.remove('hidden');
         result.className = 'result error';
         result.innerHTML = `
             <h3>❌ 오류 발생</h3>
-            <p>${error.message}</p>
+            <p><strong>오류 메시지:</strong> ${error.message}</p>
+            <p><small>자세한 내용은 브라우저 콘솔을 확인하세요.</small></p>
         `;
+        console.error('벡터 임베딩 오류:', error);
     } finally {
         submitBtn.disabled = false;
         setTimeout(() => {
@@ -129,11 +154,18 @@ let apiKeys = [];
 async function loadApiKeys() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/ai-keys`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
         apiKeys = data.keys || [];
         renderApiKeys();
     } catch (error) {
         console.error('API 키 로드 실패:', error);
+        const container = document.getElementById('api-keys-list');
+        if (container) {
+            container.innerHTML = `<p style="color: #e74c3c;">API 키를 불러올 수 없습니다: ${error.message}</p>`;
+        }
     }
 }
 
@@ -232,8 +264,14 @@ document.getElementById('add-key-form').addEventListener('submit', async (e) => 
             document.getElementById('add-key-form').reset();
             await loadApiKeys();
         } else {
-            const data = await response.json();
-            alert('저장 실패: ' + (data.error || '알 수 없는 오류'));
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch (e) {
+                // JSON 파싱 실패
+            }
+            alert('저장 실패: ' + errorMessage);
         }
     } catch (error) {
         alert('오류: ' + error.message);
@@ -249,9 +287,14 @@ document.getElementById('check-status-btn').addEventListener('click', async () =
     
     try {
         const response = await fetch(`${API_BASE_URL}/api/sync/status`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
-        if (response.ok) {
+        if (data.success) {
             result.className = 'result success';
             result.innerHTML = `
                 <h3>시스템 상태</h3>
@@ -296,9 +339,20 @@ document.getElementById('sync-btn').addEventListener('click', async () => {
             body: JSON.stringify({ target })
         });
         
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch (e) {
+                // JSON 파싱 실패
+            }
+            throw new Error(errorMessage);
+        }
+        
         const data = await response.json();
         
-        if (response.ok) {
+        if (data.success) {
             result.className = 'result success';
             result.innerHTML = `
                 <h3>동기화 완료</h3>

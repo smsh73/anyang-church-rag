@@ -153,7 +153,24 @@ router.post('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Process error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    
+    // 에러 타입에 따라 적절한 상태 코드 설정
+    let statusCode = 500;
+    let errorMessage = error.message || '처리 중 오류가 발생했습니다.';
+    
+    if (error.message.includes('YouTube') || error.message.includes('410') || error.message.includes('403')) {
+      statusCode = 400; // 클라이언트 오류
+    } else if (error.message.includes('Database') || error.message.includes('PostgreSQL')) {
+      statusCode = 503; // 서비스 사용 불가
+    }
+    
+    // 상세한 에러 정보 반환
+    res.status(statusCode).json({ 
+      success: false,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

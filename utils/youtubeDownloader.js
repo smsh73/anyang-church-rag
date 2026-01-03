@@ -46,33 +46,73 @@ export async function downloadAudio(videoId, startTime = null, endTime = null) {
   return new Promise((resolve, reject) => {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
-    // 오디오 스트림 생성
-    const stream = ytdl(videoUrl, {
-      quality: 'highestaudio',
-      filter: 'audioonly'
-    });
+    let stream;
+    let streamError = null;
     
-    let ffmpegCommand = ffmpeg(stream)
-      .audioCodec('libmp3lame')
-      .format('mp3');
-    
-    // 시간 구간 지정
-    if (startTime !== null) {
-      ffmpegCommand = ffmpegCommand.setStartTime(startTime);
+    try {
+      // 오디오 스트림 생성
+      stream = ytdl(videoUrl, {
+        quality: 'highestaudio',
+        filter: 'audioonly',
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        }
+      });
+      
+      // 스트림 에러 핸들링
+      stream.on('error', (err) => {
+        streamError = err;
+        let errorMessage = `YouTube 다운로드 실패: ${err.message}`;
+        
+        if (err.statusCode === 410) {
+          errorMessage = `YouTube 비디오를 다운로드할 수 없습니다 (410 Gone). 비디오가 삭제되었거나 접근이 제한되었을 수 있습니다.`;
+        } else if (err.statusCode === 403) {
+          errorMessage = `YouTube 비디오 접근이 거부되었습니다 (403 Forbidden). 비디오가 지역 제한 또는 연령 제한이 있을 수 있습니다.`;
+        } else if (err.statusCode === 404) {
+          errorMessage = `YouTube 비디오를 찾을 수 없습니다 (404 Not Found).`;
+        }
+        
+        reject(new Error(errorMessage));
+      });
+      
+      let ffmpegCommand = ffmpeg(stream)
+        .audioCodec('libmp3lame')
+        .format('mp3');
+      
+      // 시간 구간 지정
+      if (startTime !== null) {
+        ffmpegCommand = ffmpegCommand.setStartTime(startTime);
+      }
+      if (endTime !== null && startTime !== null) {
+        const duration = endTime - startTime;
+        ffmpegCommand = ffmpegCommand.setDuration(duration);
+      }
+      
+      ffmpegCommand
+        .on('start', (commandLine) => {
+          console.log('FFmpeg 명령:', commandLine);
+        })
+        .on('progress', (progress) => {
+          if (progress.percent) {
+            console.log(`다운로드 진행률: ${Math.round(progress.percent)}%`);
+          }
+        })
+        .on('end', () => {
+          if (!streamError) {
+            resolve(outputPath);
+          }
+        })
+        .on('error', (err) => {
+          if (!streamError) {
+            reject(new Error(`FFmpeg 오류: ${err.message}`));
+          }
+        })
+        .save(outputPath);
+    } catch (error) {
+      reject(new Error(`YouTube 다운로드 초기화 실패: ${error.message}`));
     }
-    if (endTime !== null && startTime !== null) {
-      const duration = endTime - startTime;
-      ffmpegCommand = ffmpegCommand.setDuration(duration);
-    }
-    
-    ffmpegCommand
-      .on('end', () => {
-        resolve(outputPath);
-      })
-      .on('error', (err) => {
-        reject(new Error(`FFmpeg error: ${err.message}`));
-      })
-      .save(outputPath);
   });
 }
 

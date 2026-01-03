@@ -43,18 +43,33 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
   } catch (error) {
     // 자막이 없으면 STT 사용
     console.log('Caption not available, using STT...');
+    console.log('Caption error:', error.message);
     
     let audioPath = null;
     try {
       // 오디오 다운로드
+      console.log(`Downloading audio for video ${videoId}...`);
       audioPath = await downloadAudio(videoId, startSeconds, endSeconds);
+      console.log(`Audio downloaded: ${audioPath}`);
       
       // STT 변환
+      console.log('Transcribing audio...');
       transcript = await transcribeAudio(audioPath, 'ko');
+      console.log(`Transcription completed: ${transcript.length} segments`);
       
       method = 'stt';
     } catch (sttError) {
-      throw new Error(`Failed to extract transcript: ${sttError.message}`);
+      console.error('STT error:', sttError);
+      // 더 자세한 에러 메시지 제공
+      let errorMessage = `자막 추출 실패: ${sttError.message}`;
+      
+      if (sttError.message.includes('410')) {
+        errorMessage = `YouTube 비디오를 다운로드할 수 없습니다. 비디오가 삭제되었거나 접근이 제한되었을 수 있습니다. (비디오 ID: ${videoId})`;
+      } else if (sttError.message.includes('403')) {
+        errorMessage = `YouTube 비디오 접근이 거부되었습니다. 비디오가 지역 제한 또는 연령 제한이 있을 수 있습니다. (비디오 ID: ${videoId})`;
+      }
+      
+      throw new Error(errorMessage);
     } finally {
       // 임시 파일 정리
       if (audioPath) {
