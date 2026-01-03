@@ -47,8 +47,27 @@ app.use('/api/sermon', sermonRouter);
 app.use('/api/sync', syncRouter);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    const { pool } = await import('./config/database.js');
+    // 데이터베이스 연결 테스트
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    
+    res.json({ 
+      status: 'ok', 
+      database: 'connected',
+      timestamp: new Date().toISOString() 
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'error', 
+      database: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString() 
+    });
+  }
 });
 
 // 루트
