@@ -60,6 +60,41 @@ export async function initializeDatabase() {
       )
     `);
 
+    // 설교 전체 텍스트 테이블 (문단으로 이어 붙인 원문)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sermon_transcripts (
+        id SERIAL PRIMARY KEY,
+        video_id VARCHAR(255) NOT NULL,
+        full_text TEXT NOT NULL,
+        -- 메타데이터
+        preacher VARCHAR(255),
+        sermon_topic VARCHAR(500),
+        bible_verse TEXT,
+        service_date DATE,
+        service_type VARCHAR(100),
+        video_title VARCHAR(500),
+        keywords TEXT[],
+        -- 통계
+        total_paragraphs INTEGER,
+        total_characters INTEGER,
+        -- 타임스탬프
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(video_id)
+      )
+    `);
+
+    // 설교 전체 텍스트 인덱스
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS sermon_transcripts_video_id_idx 
+      ON sermon_transcripts (video_id)
+    `);
+    
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS sermon_transcripts_service_date_idx 
+      ON sermon_transcripts (service_date)
+    `);
+
     // 설교 청크 테이블
     await client.query(`
       CREATE TABLE IF NOT EXISTS sermon_chunks (

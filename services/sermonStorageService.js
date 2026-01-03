@@ -4,8 +4,9 @@ import { pool } from '../config/database.js';
  * 설교 청크 저장
  */
 export async function saveSermonChunk(chunk, embedding) {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query(
       `INSERT INTO sermon_chunks (
         chunk_id, video_id, chunk_text, full_text, embedding,
@@ -44,8 +45,13 @@ export async function saveSermonChunk(chunk, embedding) {
         chunk.metadata.service_type
       ]
     );
+  } catch (error) {
+    console.error('Save sermon chunk error:', error);
+    throw new Error(`Failed to save sermon chunk: ${error.message}`);
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 
@@ -53,8 +59,9 @@ export async function saveSermonChunk(chunk, embedding) {
  * 설교 청크 검색 (벡터 유사도)
  */
 export async function searchSermonChunks(queryEmbedding, options = {}) {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const top = options.top || 5;
     
     const result = await client.query(
@@ -80,8 +87,93 @@ export async function searchSermonChunks(queryEmbedding, options = {}) {
     );
 
     return result.rows;
+  } catch (error) {
+    console.error('Search sermon chunks error:', error);
+    throw new Error(`Failed to search sermon chunks: ${error.message}`);
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * 설교 전체 텍스트 저장 (문단으로 이어 붙인 원문)
+ */
+export async function saveSermonTranscript(videoId, fullText, metadata = {}) {
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // 문단 수 계산 (빈 줄로 구분된 문단)
+    const paragraphs = fullText.split(/\n\s*\n/).filter(p => p.trim());
+    const totalParagraphs = paragraphs.length;
+    const totalCharacters = fullText.length;
+    
+    await client.query(
+      `INSERT INTO sermon_transcripts (
+        video_id, full_text, preacher, sermon_topic, bible_verse,
+        service_date, service_type, video_title, keywords,
+        total_paragraphs, total_characters
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (video_id) 
+      DO UPDATE SET
+        full_text = $2,
+        preacher = $3,
+        sermon_topic = $4,
+        bible_verse = $5,
+        service_date = $6,
+        service_type = $7,
+        video_title = $8,
+        keywords = $9,
+        total_paragraphs = $10,
+        total_characters = $11,
+        updated_at = CURRENT_TIMESTAMP`,
+      [
+        videoId,
+        fullText,
+        metadata.preacher || null,
+        metadata.sermon_topic || null,
+        metadata.bible_verse || null,
+        metadata.service_date || null,
+        metadata.service_type || null,
+        metadata.videoTitle || metadata.video_title || null,
+        metadata.keywords || null,
+        totalParagraphs,
+        totalCharacters
+      ]
+    );
+    
+    console.log(`✅ Saved full transcript for video: ${videoId} (${totalParagraphs} paragraphs, ${totalCharacters} characters)`);
+  } catch (error) {
+    console.error('Save sermon transcript error:', error);
+    throw new Error(`Failed to save sermon transcript: ${error.message}`);
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * 설교 전체 텍스트 조회
+ */
+export async function getSermonTranscript(videoId) {
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT * FROM sermon_transcripts WHERE video_id = $1`,
+      [videoId]
+    );
+    return result.rows[0];
+  } catch (error) {
+    console.error('Get sermon transcript error:', error);
+    throw new Error(`Failed to get sermon transcript: ${error.message}`);
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 }
 
@@ -89,8 +181,9 @@ export async function searchSermonChunks(queryEmbedding, options = {}) {
  * PostgreSQL 벡터 인덱스 동기화 (REINDEX)
  */
 export async function syncPostgreSQLIndex() {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     console.log('Reindexing PostgreSQL vector indexes...');
     
     // 벡터 인덱스 재구성
@@ -100,6 +193,7 @@ export async function syncPostgreSQLIndex() {
     // 통계 정보 업데이트
     await client.query('ANALYZE sermon_chunks');
     await client.query('ANALYZE bible_verses');
+    await client.query('ANALYZE sermon_transcripts');
     
     console.log('PostgreSQL indexes synchronized successfully');
     return { success: true, message: 'PostgreSQL indexes synchronized' };
@@ -108,6 +202,8 @@ export async function syncPostgreSQLIndex() {
     // REINDEX 실패해도 계속 진행
     return { success: false, error: error.message };
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }

@@ -1,8 +1,48 @@
 import express from 'express';
-import { searchSermonChunks } from '../services/sermonStorageService.js';
+import { searchSermonChunks, getSermonTranscript } from '../services/sermonStorageService.js';
 import { generateEmbeddings } from '../services/embeddingService.js';
 
 const router = express.Router();
+
+/**
+ * GET /api/sermon/transcript/:videoId
+ * 설교 전체 텍스트 조회 (문단으로 이어 붙인 원문)
+ */
+router.get('/transcript/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    const transcript = await getSermonTranscript(videoId);
+    
+    if (!transcript) {
+      return res.status(404).json({ error: 'Transcript not found' });
+    }
+    
+    res.json({
+      success: true,
+      videoId: transcript.video_id,
+      fullText: transcript.full_text,
+      metadata: {
+        preacher: transcript.preacher,
+        sermon_topic: transcript.sermon_topic,
+        bible_verse: transcript.bible_verse,
+        serviceDate: transcript.service_date,
+        serviceType: transcript.service_type,
+        videoTitle: transcript.video_title,
+        keywords: transcript.keywords
+      },
+      stats: {
+        totalParagraphs: transcript.total_paragraphs,
+        totalCharacters: transcript.total_characters
+      },
+      createdAt: transcript.created_at,
+      updatedAt: transcript.updated_at
+    });
+  } catch (error) {
+    console.error('Get sermon transcript error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /**
  * POST /api/sermon/search

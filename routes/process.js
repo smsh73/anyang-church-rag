@@ -6,7 +6,7 @@ import { extractMetadata } from '../utils/metadataExtractor.js';
 import { chunkText } from '../utils/textChunker.js';
 import { generateEmbeddings } from '../services/embeddingService.js';
 import { extractSermonMetadata } from '../services/metadataExtractionService.js';
-import { saveSermonChunk } from '../services/sermonStorageService.js';
+import { saveSermonChunk, saveSermonTranscript } from '../services/sermonStorageService.js';
 
 const router = express.Router();
 
@@ -38,6 +38,10 @@ router.post('/', async (req, res) => {
     console.log('Step 4: Creating paragraphs...');
     const paragraphs = createParagraphs(cleanedTranscript);
     
+    // 4-1. 전체 텍스트 생성 (문단을 이어 붙인 원문)
+    // 문단들을 빈 줄로 구분하여 하나의 완전한 텍스트로 합침
+    const fullText = paragraphs.map(p => p.text.trim()).filter(p => p.length > 0).join('\n\n');
+    
     // 5. 비디오 메타데이터 추출
     console.log('Step 5: Extracting video metadata...');
     const videoMetadata = await extractMetadata(extractResult.videoId);
@@ -64,6 +68,17 @@ router.post('/', async (req, res) => {
     
     // 9. PostgreSQL에 저장
     console.log('Step 9: Saving to PostgreSQL...');
+    
+    // 9-1. 전체 텍스트 저장 (문단으로 이어 붙인 원문)
+    console.log('Step 9-1: Saving full transcript text...');
+    const transcriptMetadata = {
+      ...videoMetadata,
+      ...(chunksWithEmbeddings[0]?.metadata || {})
+    };
+    await saveSermonTranscript(extractResult.videoId, fullText, transcriptMetadata);
+    
+    // 9-2. 청크 저장
+    console.log('Step 9-2: Saving chunks...');
     for (const chunk of chunksWithEmbeddings) {
       await saveSermonChunk(chunk, chunk.embedding);
     }
@@ -126,8 +141,10 @@ router.post('/', async (req, res) => {
       stats: {
         totalChunks: chunksWithEmbeddings.length,
         totalParagraphs: paragraphs.length,
+        totalCharacters: fullText.length,
         embeddingModel: 'text-embedding-ada-002',
-        embeddingDimensions: 768
+        embeddingDimensions: 768,
+        fullTextSaved: true
       },
       indexStatus: indexStatus || {
         postgreSQL: 'synchronized',
