@@ -33,6 +33,21 @@ initializeDatabase().catch(err => {
   console.warn('To enable database features, configure PostgreSQL connection settings.');
 });
 
+// 데이터베이스 초기화 엔드포인트 (수동 초기화용)
+app.post('/api/db/init', async (req, res) => {
+  try {
+    await initializeDatabase();
+    res.json({ success: true, message: 'Database initialized successfully' });
+  } catch (error) {
+    console.error('Manual database initialization error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      details: 'Check database connection settings and ensure PostgreSQL is accessible.'
+    });
+  }
+});
+
 // 라우트
 app.use('/api/extract', extractRouter);
 app.use('/api/correct', correctRouter);
