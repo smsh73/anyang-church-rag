@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp 설치 (ytdl-core 대안)
-RUN pip3 install --no-cache-dir yt-dlp
+# --break-system-packages 플래그 사용 (Docker 환경에서는 안전)
+RUN pip3 install --no-cache-dir --break-system-packages yt-dlp
 
 # package.json 복사 및 의존성 설치
 COPY package*.json ./
