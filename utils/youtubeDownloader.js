@@ -128,8 +128,8 @@ export async function downloadAudio(videoId, startTime = null, endTime = null) {
         }
       }
       
-      // 스트림 에러 핸들링
-      stream.on('error', (err) => {
+      // 스트림 에러 핸들링 (비동기 처리)
+      stream.on('error', async (err) => {
         streamError = err;
         let errorMessage = `YouTube 다운로드 실패: ${err.message}`;
         
@@ -141,23 +141,32 @@ export async function downloadAudio(videoId, startTime = null, endTime = null) {
           errorMessage = `YouTube 비디오를 찾을 수 없습니다 (404 Not Found).`;
         }
         
-        // yt-dlp로 재시도
-        console.log('Stream error, trying yt-dlp as fallback...');
-        checkYtdlpAvailable().then(ytdlpCheck => {
+        // yt-dlp로 재시도 (비동기 처리)
+        console.log('Stream error detected, trying yt-dlp as fallback...');
+        try {
+          const ytdlpCheck = await checkYtdlpAvailable();
           if (ytdlpCheck.available) {
             console.log('yt-dlp is available, using it as fallback...');
-            downloadAudioWithYtdlp(videoId, startTime, endTime)
-              .then(resolve)
-              .catch(ytdlpError => {
-                console.error('yt-dlp also failed:', ytdlpError.message);
-                reject(new Error(`${errorMessage} (yt-dlp fallback also failed: ${ytdlpError.message})`));
-              });
+            try {
+              const ytdlpPath = await downloadAudioWithYtdlp(videoId, startTime, endTime);
+              console.log('✅ yt-dlp fallback succeeded');
+              resolve(ytdlpPath);
+              return;
+            } catch (ytdlpError) {
+              console.error('yt-dlp fallback also failed:', ytdlpError.message);
+              reject(new Error(`${errorMessage} (yt-dlp fallback also failed: ${ytdlpError.message})`));
+              return;
+            }
           } else {
+            console.warn('yt-dlp not available for fallback');
             reject(new Error(errorMessage));
+            return;
           }
-        }).catch(() => {
+        } catch (checkError) {
+          console.error('yt-dlp check failed during fallback:', checkError.message);
           reject(new Error(errorMessage));
-        });
+          return;
+        }
       });
       
       let ffmpegCommand = ffmpeg(stream)
