@@ -116,14 +116,19 @@ export function parseSRT(srtText, startSeconds = null, endSeconds = null) {
  */
 export async function extractCaptionsWithAPI(videoId, startSeconds = null, endSeconds = null) {
   if (!YOUTUBE_API_KEY) {
+    console.log('YouTube Data API key not configured, skipping API method');
     return null; // API 키가 없으면 null 반환
   }
 
   try {
+    console.log(`Fetching captions list for video ${videoId} using YouTube Data API...`);
     // 자막 목록 가져오기
     const captionsList = await getCaptionsList(videoId);
     
+    console.log(`Found ${captionsList.length} caption(s) for video ${videoId}`);
+    
     if (captionsList.length === 0) {
+      console.log('No captions available via YouTube Data API');
       return null;
     }
 
@@ -137,17 +142,29 @@ export async function extractCaptionsWithAPI(videoId, startSeconds = null, endSe
     // 한국어가 없으면 첫 번째 자막 사용
     if (!caption) {
       caption = captionsList[0];
+      console.log(`Using caption in language: ${caption.snippet.language}`);
+    } else {
+      console.log(`Using Korean caption: ${caption.snippet.language}`);
     }
 
     // 자막 다운로드
+    console.log(`Downloading caption ${caption.id}...`);
     const srtText = await downloadCaption(caption.id);
     
     // SRT 파싱
+    console.log(`Parsing SRT caption (${srtText.length} characters)...`);
     const transcript = parseSRT(srtText, startSeconds, endSeconds);
-
+    
+    console.log(`✅ Successfully extracted ${transcript.length} segments via YouTube Data API`);
     return transcript;
   } catch (error) {
     console.warn('YouTube Data API caption extraction failed:', error.message);
+    console.warn('Error details:', {
+      videoId,
+      errorType: error.constructor.name,
+      statusCode: error.response?.status,
+      statusText: error.response?.statusText
+    });
     return null; // 실패해도 null 반환 (다른 방법 시도)
   }
 }
