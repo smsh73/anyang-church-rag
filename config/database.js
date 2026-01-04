@@ -110,7 +110,25 @@ export async function initializeDatabase() {
       ON sermon_transcripts (service_date)
     `);
 
-    // 설교 청크 테이블
+    // 설교 청크 테이블 (pgvector 확장이 없어도 생성 가능하도록)
+    // embedding 컬럼은 pgvector가 있을 때만 VECTOR 타입으로 생성
+    let vectorExtensionAvailable = false;
+    try {
+      // pgvector 확장이 활성화되어 있는지 확인
+      const extCheck = await client.query(`
+        SELECT EXISTS(
+          SELECT 1 FROM pg_extension WHERE extname = 'vector'
+        ) as exists
+      `);
+      vectorExtensionAvailable = extCheck.rows[0]?.exists || false;
+    } catch (e) {
+      // 확인 실패해도 계속 진행
+      vectorExtensionAvailable = false;
+    }
+    
+    // embedding 컬럼 타입 결정
+    const embeddingType = vectorExtensionAvailable ? 'VECTOR(768)' : 'TEXT';
+    
     await client.query(`
       CREATE TABLE IF NOT EXISTS sermon_chunks (
         id SERIAL PRIMARY KEY,
@@ -118,7 +136,7 @@ export async function initializeDatabase() {
         video_id VARCHAR(255) NOT NULL,
         chunk_text TEXT NOT NULL,
         full_text TEXT NOT NULL,
-        embedding VECTOR(768),
+        embedding ${embeddingType},
         chunk_index INTEGER NOT NULL,
         start_char INTEGER,
         end_char INTEGER,
@@ -138,20 +156,24 @@ export async function initializeDatabase() {
     `);
 
     // 벡터 검색을 위한 인덱스 (pgvector 확장이 활성화된 경우만)
-    try {
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS sermon_chunks_embedding_idx 
-        ON sermon_chunks 
-        USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
-      `);
-      console.log('✅ sermon_chunks vector index created');
-    } catch (indexError) {
-      console.warn('⚠️  Vector index creation skipped:', indexError.message);
-      console.warn('   Vector search will use sequential scan (slower).');
+    if (vectorExtensionAvailable) {
+      try {
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS sermon_chunks_embedding_idx 
+          ON sermon_chunks 
+          USING ivfflat (embedding vector_cosine_ops)
+          WITH (lists = 100)
+        `);
+        console.log('✅ sermon_chunks vector index created');
+      } catch (indexError) {
+        console.warn('⚠️  Vector index creation skipped:', indexError.message);
+        console.warn('   Vector search will use sequential scan (slower).');
+      }
+    } else {
+      console.log('ℹ️  Vector index skipped (pgvector extension not available)');
     }
 
-    // 성경 구절 테이블
+    // 성경 구절 테이블 (pgvector 확장이 없어도 생성 가능하도록)
     await client.query(`
       CREATE TABLE IF NOT EXISTS bible_verses (
         id SERIAL PRIMARY KEY,
@@ -159,7 +181,7 @@ export async function initializeDatabase() {
         chapter INTEGER NOT NULL,
         verse INTEGER NOT NULL,
         text TEXT NOT NULL,
-        embedding VECTOR(768),
+        embedding ${embeddingType},
         testament VARCHAR(20) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(book, chapter, verse)
@@ -167,17 +189,21 @@ export async function initializeDatabase() {
     `);
 
     // 성경 벡터 인덱스 (pgvector 확장이 활성화된 경우만)
-    try {
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS bible_verses_embedding_idx 
-        ON bible_verses 
-        USING ivfflat (embedding vector_cosine_ops)
-        WITH (lists = 100)
-      `);
-      console.log('✅ bible_verses vector index created');
-    } catch (indexError) {
-      console.warn('⚠️  Vector index creation skipped:', indexError.message);
-      console.warn('   Vector search will use sequential scan (slower).');
+    if (vectorExtensionAvailable) {
+      try {
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS bible_verses_embedding_idx 
+          ON bible_verses 
+          USING ivfflat (embedding vector_cosine_ops)
+          WITH (lists = 100)
+        `);
+        console.log('✅ bible_verses vector index created');
+      } catch (indexError) {
+        console.warn('⚠️  Vector index creation skipped:', indexError.message);
+        console.warn('   Vector search will use sequential scan (slower).');
+      }
+    } else {
+      console.log('ℹ️  Vector index skipped (pgvector extension not available)');
     }
 
     console.log('✅ Database initialized successfully');
