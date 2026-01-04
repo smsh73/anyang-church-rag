@@ -22,31 +22,33 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
   try {
     // 방법 1: YouTube Data API를 사용한 자막 추출 (API 키가 있는 경우)
     // YouTube Data API는 가장 안정적이므로 우선적으로 시도
-    if (process.env.YOUTUBE_API_KEY) {
-      console.log('Trying YouTube Data API for captions...');
-      try {
-        const apiTranscript = await extractCaptionsWithAPI(videoId, startSeconds, endSeconds);
-        if (apiTranscript && apiTranscript.length > 0) {
-          transcript = apiTranscript;
-          method = 'youtube-api';
-          console.log(`✅ Captions extracted via YouTube Data API: ${transcript.length} segments`);
-          return {
-            success: true,
-            videoId,
-            method,
-            startTime: startSeconds,
-            endTime: endSeconds,
-            transcript
-          };
-        } else {
-          console.log('YouTube Data API: No captions found or empty result');
-        }
-      } catch (apiError) {
-        console.warn('YouTube Data API failed:', apiError.message);
-        // API 실패해도 다른 방법 시도
+    // API 키는 데이터베이스 또는 환경 변수에서 가져옴
+    console.log('Trying YouTube Data API for captions...');
+    try {
+      const apiTranscript = await extractCaptionsWithAPI(videoId, startSeconds, endSeconds);
+      if (apiTranscript && apiTranscript.length > 0) {
+        transcript = apiTranscript;
+        method = 'youtube-api';
+        console.log(`✅ Captions extracted via YouTube Data API: ${transcript.length} segments`);
+        return {
+          success: true,
+          videoId,
+          method,
+          startTime: startSeconds,
+          endTime: endSeconds,
+          transcript
+        };
+      } else {
+        console.log('YouTube Data API: No captions found or empty result');
       }
-    } else {
-      console.log('YouTube Data API key not set. Skipping API method.');
+    } catch (apiError) {
+      // API 키가 없거나 실패한 경우
+      if (apiError.message.includes('not configured') || apiError.message.includes('not set')) {
+        console.log('YouTube Data API key not configured. Skipping API method.');
+      } else {
+        console.warn('YouTube Data API failed:', apiError.message);
+      }
+      // API 실패해도 다른 방법 시도
     }
     
     // 방법 2: youtube-transcript 라이브러리 사용

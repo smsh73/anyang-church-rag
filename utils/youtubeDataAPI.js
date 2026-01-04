@@ -4,17 +4,36 @@
 
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { getApiKey } from '../services/aiKeyManager.js';
 
 dotenv.config();
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+/**
+ * YouTube API 키 가져오기 (우선순위: 데이터베이스 > 환경 변수)
+ */
+async function getYouTubeApiKey() {
+  try {
+    // 1. 데이터베이스에서 키 가져오기 (우선)
+    const dbKey = await getApiKey('youtube');
+    if (dbKey && dbKey.api_key) {
+      return dbKey.api_key;
+    }
+  } catch (error) {
+    console.warn('Failed to get YouTube API key from database:', error.message);
+  }
+  
+  // 2. 환경 변수에서 키 가져오기 (fallback)
+  return process.env.YOUTUBE_API_KEY;
+}
 
 /**
  * YouTube Data API를 사용하여 자막 목록 가져오기
  */
 export async function getCaptionsList(videoId) {
-  if (!YOUTUBE_API_KEY) {
+  const apiKey = await getYouTubeApiKey();
+  if (!apiKey) {
     throw new Error('YouTube API key is not configured');
   }
 
@@ -23,7 +42,7 @@ export async function getCaptionsList(videoId) {
       params: {
         part: 'snippet',
         videoId: videoId,
-        key: YOUTUBE_API_KEY
+        key: apiKey
       }
     });
 
@@ -42,7 +61,8 @@ export async function getCaptionsList(videoId) {
  * YouTube Data API를 사용하여 자막 다운로드
  */
 export async function downloadCaption(captionId, language = 'ko') {
-  if (!YOUTUBE_API_KEY) {
+  const apiKey = await getYouTubeApiKey();
+  if (!apiKey) {
     throw new Error('YouTube API key is not configured');
   }
 
@@ -50,7 +70,7 @@ export async function downloadCaption(captionId, language = 'ko') {
     const response = await axios.get(`${YOUTUBE_API_BASE}/captions/${captionId}`, {
       params: {
         tfmt: 'srt', // SRT 형식
-        key: YOUTUBE_API_KEY
+        key: apiKey
       },
       responseType: 'text'
     });
@@ -115,7 +135,8 @@ export function parseSRT(srtText, startSeconds = null, endSeconds = null) {
  * YouTube Data API를 사용하여 자막 추출 (한국어 우선)
  */
 export async function extractCaptionsWithAPI(videoId, startSeconds = null, endSeconds = null) {
-  if (!YOUTUBE_API_KEY) {
+  const apiKey = await getYouTubeApiKey();
+  if (!apiKey) {
     console.log('YouTube Data API key not configured, skipping API method');
     return null; // API 키가 없으면 null 반환
   }

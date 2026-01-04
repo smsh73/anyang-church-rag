@@ -35,7 +35,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Provider and API key are required' });
     }
     
-    const validProviders = ['openai', 'claude', 'gemini', 'perplexity', 'elevenlabs', 'nanobanana'];
+    const validProviders = ['openai', 'claude', 'gemini', 'perplexity', 'elevenlabs', 'nanobanana', 'youtube'];
     if (!validProviders.includes(provider)) {
       return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
     }
