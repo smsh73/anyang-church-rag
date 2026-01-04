@@ -57,6 +57,7 @@ export async function saveSermonChunk(chunk, embedding) {
 
 /**
  * 설교 청크 검색 (벡터 유사도)
+ * pgvector가 없으면 키워드 검색으로 fallback
  */
 export async function searchSermonChunks(queryEmbedding, options = {}) {
   let client;
@@ -64,29 +65,75 @@ export async function searchSermonChunks(queryEmbedding, options = {}) {
     client = await pool.connect();
     const top = options.top || 5;
     
-    const result = await client.query(
-      `SELECT chunk_id, video_id, chunk_text, full_text, chunk_index,
-              preacher, sermon_topic, bible_verse, service_date, keywords,
-              video_title, service_type,
-              1 - (embedding <=> $1::vector) as similarity
-       FROM sermon_chunks
-       WHERE ($2::text IS NULL OR service_type = $2)
-         AND ($3::date IS NULL OR service_date >= $3)
-         AND ($4::date IS NULL OR service_date <= $4)
-         AND ($5::text IS NULL OR video_id = $5)
-       ORDER BY embedding <=> $1::vector
-       LIMIT $6`,
-      [
-        JSON.stringify(queryEmbedding),
-        options.serviceType || null,
-        options.serviceDateFrom || null,
-        options.serviceDateTo || null,
-        options.videoId || null,
-        top
-      ]
-    );
-
-    return result.rows;
+    // pgvector 확장이 있는지 확인
+    let vectorSearchAvailable = false;
+    try {
+      const extCheck = await client.query(`
+        SELECT EXISTS(
+          SELECT 1 FROM pg_extension WHERE extname = 'vector'
+        ) as exists
+      `);
+      vectorSearchAvailable = extCheck.rows[0]?.exists || false;
+    } catch (e) {
+      vectorSearchAvailable = false;
+    }
+    
+    if (vectorSearchAvailable) {
+      // 벡터 검색 (pgvector 사용)
+      try {
+        const result = await client.query(
+          `SELECT chunk_id, video_id, chunk_text, full_text, chunk_index,
+                  preacher, sermon_topic, bible_verse, service_date, keywords,
+                  video_title, service_type,
+                  1 - (embedding <=> $1::vector) as similarity
+           FROM sermon_chunks
+           WHERE ($2::text IS NULL OR service_type = $2)
+             AND ($3::date IS NULL OR service_date >= $3)
+             AND ($4::date IS NULL OR service_date <= $4)
+             AND ($5::text IS NULL OR video_id = $5)
+           ORDER BY embedding <=> $1::vector
+           LIMIT $6`,
+          [
+            JSON.stringify(queryEmbedding),
+            options.serviceType || null,
+            options.serviceDateFrom || null,
+            options.serviceDateTo || null,
+            options.videoId || null,
+            top
+          ]
+        );
+        return result.rows;
+      } catch (vectorError) {
+        console.warn('Vector search failed, falling back to keyword search:', vectorError.message);
+        vectorSearchAvailable = false;
+      }
+    }
+    
+    // 키워드 검색 (pgvector 없을 때 또는 벡터 검색 실패 시)
+    if (!vectorSearchAvailable) {
+      console.log('Using keyword search (pgvector not available)');
+      const result = await client.query(
+        `SELECT chunk_id, video_id, chunk_text, full_text, chunk_index,
+                preacher, sermon_topic, bible_verse, service_date, keywords,
+                video_title, service_type,
+                1.0 as similarity
+         FROM sermon_chunks
+         WHERE ($1::text IS NULL OR service_type = $1)
+           AND ($2::date IS NULL OR service_date >= $2)
+           AND ($3::date IS NULL OR service_date <= $3)
+           AND ($4::text IS NULL OR video_id = $4)
+         ORDER BY created_at DESC
+         LIMIT $5`,
+        [
+          options.serviceType || null,
+          options.serviceDateFrom || null,
+          options.serviceDateTo || null,
+          options.videoId || null,
+          top
+        ]
+      );
+      return result.rows;
+    }
   } catch (error) {
     console.error('Search sermon chunks error:', error);
     throw new Error(`Failed to search sermon chunks: ${error.message}`);
