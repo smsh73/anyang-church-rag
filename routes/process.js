@@ -22,9 +22,29 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'URL is required' });
     }
     
-    // 1. 자막 추출
-    console.log('Step 1: Extracting transcript...');
-    const extractResult = await extractTranscript(url, startTime, endTime);
+            // 1. 자막 추출
+            console.log('Step 1: Extracting transcript...');
+            console.log('Request details:', { url, startTime, endTime });
+            
+            let extractResult;
+            try {
+              extractResult = await extractTranscript(url, startTime, endTime);
+              console.log(`✅ Transcript extracted successfully: method=${extractResult.method}, segments=${extractResult.transcript?.length || 0}`);
+            } catch (extractError) {
+              console.error('❌ Transcript extraction failed:', extractError);
+              console.error('Error stack:', extractError.stack);
+              
+              // 더 구체적인 에러 메시지
+              let errorMessage = extractError.message;
+              
+              // YouTube Data API 키가 없으면 안내
+              if (!process.env.YOUTUBE_API_KEY && errorMessage.includes('다운로드')) {
+                errorMessage += '\n\n💡 팁: YouTube Data API 키를 설정하면 더 안정적으로 자막을 가져올 수 있습니다.';
+                errorMessage += '\n   Azure App Service 설정에서 YOUTUBE_API_KEY 환경 변수를 추가하세요.';
+              }
+              
+              throw new Error(errorMessage);
+            }
     
     // 2. AI 보정
     console.log('Step 2: Correcting transcript...');
