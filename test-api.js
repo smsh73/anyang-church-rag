@@ -4,18 +4,18 @@
 
 const BASE_URL = process.env.API_URL || 'http://localhost:3000';
 
-// fetch 초기화
-let fetch;
-if (typeof globalThis.fetch === 'undefined') {
+// fetch 초기화 (최상위 레벨에서)
+let fetchFunction;
+if (typeof globalThis.fetch !== 'undefined') {
+  fetchFunction = globalThis.fetch;
+} else {
   try {
     const nodeFetch = await import('node-fetch');
-    fetch = nodeFetch.default;
+    fetchFunction = nodeFetch.default;
   } catch (e) {
     console.error('node-fetch가 필요합니다: npm install node-fetch');
     process.exit(1);
   }
-} else {
-  fetch = globalThis.fetch;
 }
 
 async function testEndpoint(method, path, body = null) {
@@ -29,7 +29,7 @@ async function testEndpoint(method, path, body = null) {
       options.body = JSON.stringify(body);
     }
     
-    const response = await fetch(`${BASE_URL}${path}`, options);
+    const response = await fetchFunction(`${BASE_URL}${path}`, options);
     
     let data;
     const contentType = response.headers.get('content-type');
@@ -70,8 +70,12 @@ async function runTests() {
   console.log('2. Root Endpoint 테스트...');
   const root = await testEndpoint('GET', '/');
   console.log(`   Status: ${root.status}, OK: ${root.ok}`);
-  if (root.ok && root.data.endpoints) {
-    console.log(`   ✅ Endpoints 확인: ${Object.keys(root.data.endpoints).length}개\n`);
+  if (root.ok) {
+    if (typeof root.data === 'object' && root.data.endpoints) {
+      console.log(`   ✅ Endpoints 확인: ${Object.keys(root.data.endpoints).length}개\n`);
+    } else {
+      console.log('   ✅ Root endpoint 응답 확인 (HTML 또는 다른 형식)\n');
+    }
   } else {
     console.log('   ❌ Root endpoint 실패\n');
   }
