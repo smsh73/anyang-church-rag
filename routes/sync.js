@@ -98,15 +98,21 @@ router.get('/status', async (req, res) => {
       `);
       status.postgreSQL.tables = tableResult.rows.map(row => row.table_name);
       
-      // 통계 정보
-      const statsResult = await client.query(`
-        SELECT 
-          (SELECT COUNT(*) FROM sermon_chunks) as sermon_chunks_count,
-          (SELECT COUNT(*) FROM bible_verses) as bible_verses_count,
-          (SELECT COUNT(*) FROM sermon_transcripts) as transcripts_count,
-          (SELECT COUNT(*) FROM ai_api_keys WHERE is_active = true) as active_api_keys_count
-      `);
-      status.postgreSQL.stats = statsResult.rows[0];
+      // 통계 정보 (테이블이 존재하는 경우만)
+      try {
+        const statsResult = await client.query(`
+          SELECT 
+            (SELECT COUNT(*) FROM sermon_chunks) as sermon_chunks_count,
+            (SELECT COUNT(*) FROM bible_verses) as bible_verses_count,
+            (SELECT COUNT(*) FROM sermon_transcripts) as transcripts_count,
+            (SELECT COUNT(*) FROM ai_api_keys WHERE is_active = true) as active_api_keys_count
+        `);
+        status.postgreSQL.stats = statsResult.rows[0];
+      } catch (statsError) {
+        // 테이블이 없으면 통계 정보는 null
+        status.postgreSQL.stats = null;
+        console.warn('Stats query failed (tables may not exist):', statsError.message);
+      }
       
       client.release();
     } catch (dbError) {

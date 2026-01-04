@@ -43,8 +43,15 @@ export async function initializeDatabase() {
   let client;
   try {
     client = await pool.connect();
-    // pgvector 확장 활성화
-    await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+    // pgvector 확장 활성화 (Azure PostgreSQL에서는 관리자 권한 필요)
+    try {
+      await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+      console.log('✅ pgvector extension enabled');
+    } catch (vectorError) {
+      console.warn('⚠️  pgvector extension not available:', vectorError.message);
+      console.warn('   Vector search features will be limited. Tables will be created without vector indexes.');
+      console.warn('   To enable pgvector, contact Azure PostgreSQL administrator.');
+    }
     
     // AI API 키 테이블
     await client.query(`
@@ -122,13 +129,19 @@ export async function initializeDatabase() {
       )
     `);
 
-    // 벡터 검색을 위한 인덱스
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS sermon_chunks_embedding_idx 
-      ON sermon_chunks 
-      USING ivfflat (embedding vector_cosine_ops)
-      WITH (lists = 100)
-    `);
+    // 벡터 검색을 위한 인덱스 (pgvector 확장이 활성화된 경우만)
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS sermon_chunks_embedding_idx 
+        ON sermon_chunks 
+        USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 100)
+      `);
+      console.log('✅ sermon_chunks vector index created');
+    } catch (indexError) {
+      console.warn('⚠️  Vector index creation skipped:', indexError.message);
+      console.warn('   Vector search will use sequential scan (slower).');
+    }
 
     // 성경 구절 테이블
     await client.query(`
@@ -145,13 +158,19 @@ export async function initializeDatabase() {
       )
     `);
 
-    // 성경 벡터 인덱스
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS bible_verses_embedding_idx 
-      ON bible_verses 
-      USING ivfflat (embedding vector_cosine_ops)
-      WITH (lists = 100)
-    `);
+    // 성경 벡터 인덱스 (pgvector 확장이 활성화된 경우만)
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS bible_verses_embedding_idx 
+        ON bible_verses 
+        USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 100)
+      `);
+      console.log('✅ bible_verses vector index created');
+    } catch (indexError) {
+      console.warn('⚠️  Vector index creation skipped:', indexError.message);
+      console.warn('   Vector search will use sequential scan (slower).');
+    }
 
     console.log('✅ Database initialized successfully');
   } catch (error) {
