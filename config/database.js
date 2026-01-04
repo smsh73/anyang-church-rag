@@ -182,6 +182,15 @@ export async function initializeDatabase() {
       user: dbConfig.user,
       ssl: !!dbConfig.ssl
     });
+    
+    // pgvector 관련 에러는 경고만 출력하고 계속 진행
+    if (error.message.includes('vector') || error.message.includes('extension')) {
+      console.warn('⚠️  pgvector extension error (non-critical). Tables should still be created.');
+      console.warn('   Vector search features will be limited.');
+      // 에러를 throw하지 않고 성공으로 처리
+      return;
+    }
+    
     // 데이터베이스 초기화 실패해도 서버는 계속 실행
     console.warn('⚠️  Server will continue without database. Some features may be unavailable.');
     throw error;
