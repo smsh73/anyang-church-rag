@@ -107,9 +107,17 @@ async function runTests() {
 }
 
 // Node.js에서 fetch 사용 (Node 18+)
-if (typeof fetch === 'undefined') {
-  console.log('Node.js 18+ 또는 node-fetch 패키지가 필요합니다.');
-  process.exit(1);
+let fetch;
+if (typeof globalThis.fetch === 'undefined') {
+  try {
+    fetch = (await import('node-fetch')).default;
+  } catch (e) {
+    console.log('Node.js 18+ 또는 node-fetch 패키지가 필요합니다.');
+    console.log('설치: npm install node-fetch');
+    process.exit(1);
+  }
+} else {
+  fetch = globalThis.fetch;
 }
 
 runTests().catch(console.error);
