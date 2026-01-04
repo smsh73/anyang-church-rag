@@ -218,9 +218,60 @@ export async function initializeDatabase() {
     });
     
     // pgvector 관련 에러는 경고만 출력하고 계속 진행
-    if (error.message.includes('vector') || error.message.includes('extension')) {
-      console.warn('⚠️  pgvector extension error (non-critical). Tables should still be created.');
+    if (error.message.includes('vector') || error.message.includes('extension') || error.message.includes('allow-listed')) {
+      console.warn('⚠️  pgvector extension error (non-critical). Attempting to create tables without vector support.');
       console.warn('   Vector search features will be limited.');
+      
+      // pgvector 없이 테이블 생성 재시도
+      try {
+        if (client) {
+          // embedding을 TEXT로 사용하여 테이블 생성
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS sermon_chunks (
+              id SERIAL PRIMARY KEY,
+              chunk_id VARCHAR(255) UNIQUE NOT NULL,
+              video_id VARCHAR(255) NOT NULL,
+              chunk_text TEXT NOT NULL,
+              full_text TEXT NOT NULL,
+              embedding TEXT,
+              chunk_index INTEGER NOT NULL,
+              start_char INTEGER,
+              end_char INTEGER,
+              start_time INTEGER,
+              end_time INTEGER,
+              preacher VARCHAR(255),
+              sermon_topic VARCHAR(500),
+              bible_verse TEXT,
+              service_date DATE,
+              keywords TEXT[],
+              video_title VARCHAR(500),
+              service_type VARCHAR(100),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS bible_verses (
+              id SERIAL PRIMARY KEY,
+              book VARCHAR(100) NOT NULL,
+              chapter INTEGER NOT NULL,
+              verse INTEGER NOT NULL,
+              text TEXT NOT NULL,
+              embedding TEXT,
+              testament VARCHAR(20) NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(book, chapter, verse)
+            )
+          `);
+          
+          console.log('✅ Tables created without pgvector support');
+        }
+      } catch (retryError) {
+        console.error('❌ Failed to create tables even without pgvector:', retryError.message);
+        throw retryError;
+      }
+      
       // 에러를 throw하지 않고 성공으로 처리
       return;
     }
