@@ -85,8 +85,8 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// 루트
-app.get('/', (req, res) => {
+// API 정보 엔드포인트
+app.get('/api', (req, res) => {
   res.json({
     message: '안양제일교회 YouTube RAG 시스템 API',
     version: '2.0.0',
@@ -123,6 +123,14 @@ app.get('/', (req, res) => {
       }
     }
   });
+});
+
+// 루트 경로는 index.html로 리다이렉트 (정적 파일이 없을 경우를 대비)
+// express.static이 먼저 처리하므로 실제로는 index.html이 서빙됨
+app.get('/', (req, res, next) => {
+  // 정적 파일 미들웨어가 처리하지 못한 경우에만 실행
+  // 일반적으로는 express.static이 index.html을 서빙함
+  next();
 });
 
 // 에러 핸들링
