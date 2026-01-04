@@ -24,7 +24,20 @@ app.use(cors());
 app.use(express.json());
 
 // 정적 파일 서빙 (프론트엔드)
-app.use(express.static('public'));
+// 캐시 무효화를 위한 헤더 설정 (개발 환경에서는 캐시 비활성화)
+app.use(express.static('public', {
+  maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, path) => {
+    // HTML 파일은 캐시하지 않음 (항상 최신 버전 사용)
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
 // 데이터베이스 초기화 (비동기, 실패해도 서버는 계속 실행)
 initializeDatabase().catch(err => {
