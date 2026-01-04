@@ -2,6 +2,7 @@ import { YoutubeTranscript } from 'youtube-transcript';
 import { extractVideoId, downloadAudio, cleanupTempFile } from '../utils/youtubeDownloader.js';
 import { transcribeAudio } from '../utils/whisperSTT.js';
 import { parseTimeToSeconds } from '../utils/timeParser.js';
+import { extractCaptionsWithAPI } from '../utils/youtubeDataAPI.js';
 
 /**
  * YouTube 자막 추출 (자막 또는 STT)
@@ -19,7 +20,27 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
   let method = 'caption';
   
   try {
-    // 먼저 자막 시도
+    // 방법 1: YouTube Data API를 사용한 자막 추출 (API 키가 있는 경우)
+    if (process.env.YOUTUBE_API_KEY) {
+      console.log('Trying YouTube Data API for captions...');
+      const apiTranscript = await extractCaptionsWithAPI(videoId, startSeconds, endSeconds);
+      if (apiTranscript && apiTranscript.length > 0) {
+        transcript = apiTranscript;
+        method = 'youtube-api';
+        console.log(`✅ Captions extracted via YouTube Data API: ${transcript.length} segments`);
+        return {
+          success: true,
+          videoId,
+          method,
+          startTime: startSeconds,
+          endTime: endSeconds,
+          transcript
+        };
+      }
+    }
+    
+    // 방법 2: youtube-transcript 라이브러리 사용
+    console.log('Trying youtube-transcript library...');
     const transcriptList = await YoutubeTranscript.fetchTranscript(videoId);
     
     // 시간 구간 필터링
@@ -40,6 +61,7 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
       });
     
     method = 'caption';
+    console.log(`✅ Captions extracted via youtube-transcript: ${transcript.length} segments`);
   } catch (error) {
     // 자막이 없으면 STT 사용
     console.log('Caption not available, using STT...');

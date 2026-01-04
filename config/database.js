@@ -44,13 +44,21 @@ export async function initializeDatabase() {
   try {
     client = await pool.connect();
     // pgvector 확장 활성화 (Azure PostgreSQL에서는 관리자 권한 필요)
+    // Azure PostgreSQL에서는 확장 활성화가 제한될 수 있으므로 에러를 무시하고 계속 진행
     try {
       await client.query('CREATE EXTENSION IF NOT EXISTS vector');
       console.log('✅ pgvector extension enabled');
     } catch (vectorError) {
-      console.warn('⚠️  pgvector extension not available:', vectorError.message);
-      console.warn('   Vector search features will be limited. Tables will be created without vector indexes.');
-      console.warn('   To enable pgvector, contact Azure PostgreSQL administrator.');
+      // Azure PostgreSQL에서 확장 활성화 실패는 정상일 수 있음
+      if (vectorError.message.includes('vector') || vectorError.message.includes('extension') || vectorError.message.includes('allow-listed')) {
+        console.warn('⚠️  pgvector extension not available (Azure PostgreSQL limitation):', vectorError.message);
+        console.warn('   Vector search features will be limited. Tables will be created without vector indexes.');
+        console.warn('   This is expected in Azure PostgreSQL. Tables will still be created.');
+        // 에러를 throw하지 않고 계속 진행
+      } else {
+        // 다른 종류의 에러는 다시 throw
+        throw vectorError;
+      }
     }
     
     // AI API 키 테이블

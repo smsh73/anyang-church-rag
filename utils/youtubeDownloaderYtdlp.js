@@ -34,21 +34,15 @@ export async function downloadAudioWithYtdlp(videoId, startTime = null, endTime 
     // --audio-format mp3: MP3 형식
     // --audio-quality 0: 최고 품질
     // --no-playlist: 플레이리스트 무시
-    let command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-playlist`;
+    // --extract-flat: 빠른 다운로드
+    let command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-playlist --no-warnings`;
     
-    // 시간 구간 지정 (yt-dlp는 --download-sections 사용)
-    if (startTime !== null && endTime !== null) {
-      const startTimeStr = formatTime(startTime);
-      const endTimeStr = formatTime(endTime);
-      command += ` --download-sections "*${startTimeStr}-${endTimeStr}"`;
-    } else if (startTime !== null) {
-      const startTimeStr = formatTime(startTime);
-      command += ` --download-sections "*${startTimeStr}-"`;
-    }
-    
-    // 출력 파일 경로 (확장자 없이 지정하면 자동 추가)
+    // 시간 구간 지정
+    // --download-sections는 일부 비디오에서 작동하지 않을 수 있으므로
+    // 전체 다운로드 후 FFmpeg로 구간 추출하는 것이 더 안정적
     const outputPathNoExt = outputPath.replace(/\.mp3$/, '');
-    command += ` -o "${outputPathNoExt}.%(ext)s" "${videoUrl}"`;
+    const tempOutputPath = `${outputPathNoExt}_full.%(ext)s`;
+    command += ` -o "${tempOutputPath}" "${videoUrl}"`;
     
     console.log(`Executing yt-dlp command: ${command}`);
     
@@ -57,56 +51,94 @@ export async function downloadAudioWithYtdlp(videoId, startTime = null, endTime 
       maxBuffer: 10 * 1024 * 1024 // 10MB 버퍼
     });
     
-    if (stderr && !stderr.includes('WARNING')) {
+    if (stderr && !stderr.includes('WARNING') && !stderr.includes('DeprecationWarning')) {
       console.warn('yt-dlp stderr:', stderr);
     }
     
     // 출력 파일 확인 (yt-dlp는 확장자를 자동 추가)
-    // outputPathNoExt.mp3 또는 outputPathNoExt.m4a 등으로 저장될 수 있음
-    let finalPath = null;
-    const possibleExtensions = ['mp3', 'm4a', 'webm', 'opus'];
+    let fullAudioPath = null;
+    const possibleExtensions = ['mp3', 'm4a', 'webm', 'opus', 'ogg'];
     
     for (const ext of possibleExtensions) {
-      const testPath = `${outputPathNoExt}.${ext}`;
+      const testPath = `${outputPathNoExt}_full.${ext}`;
       if (fs.existsSync(testPath)) {
-        finalPath = testPath;
+        fullAudioPath = testPath;
         break;
       }
     }
     
     // 확장자 없이 찾기
-    if (!finalPath) {
+    if (!fullAudioPath) {
       const files = fs.readdirSync(tempDir);
-      const matchingFile = files.find(f => f.startsWith(path.basename(outputPathNoExt)));
+      const matchingFile = files.find(f => f.includes('_full.') && f.startsWith(path.basename(outputPathNoExt)));
       if (matchingFile) {
-        finalPath = path.join(tempDir, matchingFile);
+        fullAudioPath = path.join(tempDir, matchingFile);
       }
     }
     
-    if (!finalPath || !fs.existsSync(finalPath)) {
-      throw new Error(`Downloaded file not found. Expected: ${outputPathNoExt}.*`);
+    if (!fullAudioPath || !fs.existsSync(fullAudioPath)) {
+      throw new Error(`Downloaded file not found. Expected: ${outputPathNoExt}_full.*`);
     }
     
-    // MP3가 아니면 FFmpeg로 변환 필요
-    if (!finalPath.endsWith('.mp3')) {
-      console.log(`Converting ${path.extname(finalPath)} to MP3...`);
-      const mp3Path = outputPath;
+    // 시간 구간이 지정된 경우 FFmpeg로 구간 추출
+    if (startTime !== null || endTime !== null) {
+      console.log(`Extracting time segment: ${startTime || 0}s - ${endTime || 'end'}`);
       await new Promise((resolve, reject) => {
-        ffmpeg(finalPath)
+        let ffmpegCommand = ffmpeg(fullAudioPath)
           .audioCodec('libmp3lame')
-          .format('mp3')
+          .format('mp3');
+        
+        if (startTime !== null) {
+          ffmpegCommand = ffmpegCommand.setStartTime(startTime);
+        }
+        if (endTime !== null && startTime !== null) {
+          const duration = endTime - startTime;
+          ffmpegCommand = ffmpegCommand.setDuration(duration);
+        }
+        
+        ffmpegCommand
           .on('end', () => {
-            fs.removeSync(finalPath); // 원본 파일 삭제
+            // 원본 파일 삭제
+            try {
+              fs.removeSync(fullAudioPath);
+            } catch (e) {
+              console.warn('Failed to remove temp file:', e.message);
+            }
             resolve();
           })
           .on('error', reject)
-          .save(mp3Path);
+          .save(outputPath);
       });
-      finalPath = mp3Path;
+      
+      console.log(`Audio segment extracted successfully: ${outputPath}`);
+      return outputPath;
     }
     
-    console.log(`Audio downloaded successfully: ${finalPath}`);
-    return finalPath;
+    // MP3가 아니면 FFmpeg로 변환
+    if (!fullAudioPath.endsWith('.mp3')) {
+      console.log(`Converting ${path.extname(fullAudioPath)} to MP3...`);
+      await new Promise((resolve, reject) => {
+        ffmpeg(fullAudioPath)
+          .audioCodec('libmp3lame')
+          .format('mp3')
+          .on('end', () => {
+            fs.removeSync(fullAudioPath); // 원본 파일 삭제
+            resolve();
+          })
+          .on('error', reject)
+          .save(outputPath);
+      });
+      console.log(`Audio converted successfully: ${outputPath}`);
+      return outputPath;
+    }
+    
+    // 이미 MP3이고 구간 추출이 필요 없으면 파일명만 변경
+    if (fullAudioPath !== outputPath) {
+      fs.moveSync(fullAudioPath, outputPath);
+    }
+    
+    console.log(`Audio downloaded successfully: ${outputPath}`);
+    return outputPath;
   } catch (error) {
     console.error('yt-dlp download error:', error);
     throw new Error(`yt-dlp download failed: ${error.message}`);
