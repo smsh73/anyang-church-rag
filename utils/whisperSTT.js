@@ -31,37 +31,63 @@ export async function transcribeAudio(audioPath, language = 'ko') {
   const model = await initializeTranscriber();
   
   try {
-    // 오디오 파일을 읽어서 변환
-    // 참고: @xenova/transformers는 직접 파일 경로를 지원하지 않으므로
-    // 오디오를 버퍼로 읽어서 처리해야 할 수 있습니다.
-    // 실제 구현에서는 오디오를 적절한 형식으로 변환해야 합니다.
+    console.log(`Transcribing audio file: ${audioPath}`);
     
+    // @xenova/transformers는 파일 경로를 직접 지원합니다
+    // 하지만 오디오 형식이 올바른지 확인 필요
     const result = await model(audioPath, {
       language: language,
-      return_timestamps: true
+      return_timestamps: true,
+      chunk_length_s: 30,  // 30초 청크로 처리
+      stride_length_s: 5   // 5초 오버랩
     });
+    
+    console.log(`Transcription result type: ${typeof result}`);
+    console.log(`Has chunks: ${!!result.chunks}`);
+    console.log(`Has text: ${!!result.text}`);
     
     // 결과를 표준 형식으로 변환
     const transcript = [];
-    if (result.chunks) {
+    
+    if (result.chunks && Array.isArray(result.chunks) && result.chunks.length > 0) {
+      // chunks가 있는 경우 (타임스탬프 포함)
       for (const chunk of result.chunks) {
+        if (chunk.text && chunk.text.trim()) {
+          const startTime = chunk.timestamp ? chunk.timestamp[0] : 0;
+          const endTime = chunk.timestamp ? chunk.timestamp[1] : 0;
+          
+          transcript.push({
+            text: chunk.text.trim(),
+            offset: Math.floor(startTime * 1000), // 초를 밀리초로 변환
+            duration: Math.floor((endTime - startTime) * 1000)
+          });
+        }
+      }
+    } else if (result.text) {
+      // chunks가 없지만 text가 있는 경우
+      // 전체 텍스트를 하나의 세그먼트로 처리
+      const text = result.text.trim();
+      if (text) {
         transcript.push({
-          text: chunk.text,
-          offset: Math.floor(chunk.timestamp[0] * 1000), // 밀리초
-          duration: Math.floor((chunk.timestamp[1] - chunk.timestamp[0]) * 1000)
+          text: text,
+          offset: 0,
+          duration: 0  // duration은 알 수 없음
         });
       }
     } else {
-      // chunks가 없는 경우 전체 텍스트를 하나로
-      transcript.push({
-        text: result.text || '',
-        offset: 0,
-        duration: 0
-      });
+      // 결과가 예상과 다른 형식인 경우
+      console.warn('Unexpected transcription result format:', JSON.stringify(result).substring(0, 200));
+      throw new Error('Transcription result format is not supported');
     }
     
+    if (transcript.length === 0) {
+      throw new Error('No transcript segments generated from audio');
+    }
+    
+    console.log(`Transcription completed: ${transcript.length} segments`);
     return transcript;
   } catch (error) {
+    console.error('Transcription error details:', error);
     throw new Error(`Transcription failed: ${error.message}`);
   }
 }

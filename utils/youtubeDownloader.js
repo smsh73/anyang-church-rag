@@ -1,8 +1,10 @@
 import ytdl from 'ytdl-core';
+import ytdlDistube from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { downloadAudioWithYtdlp, checkYtdlpAvailable } from './youtubeDownloaderYtdlp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,24 +44,76 @@ export function extractVideoId(url) {
  */
 export async function downloadAudio(videoId, startTime = null, endTime = null) {
   const outputPath = path.join(tempDir, `${videoId}_${Date.now()}.mp3`);
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
+  // 먼저 yt-dlp 시도 (더 안정적)
+  try {
+    const ytdlpCheck = await checkYtdlpAvailable();
+    if (ytdlpCheck.available) {
+      console.log('Using yt-dlp for audio download...');
+      try {
+        const ytdlpPath = await downloadAudioWithYtdlp(videoId, startTime, endTime);
+        // yt-dlp는 이미 구간이 추출된 파일을 반환하므로 그대로 사용
+        return ytdlpPath;
+      } catch (ytdlpError) {
+        console.warn('yt-dlp failed, falling back to ytdl-core:', ytdlpError.message);
+        // yt-dlp 실패 시 ytdl-core로 fallback
+      }
+    }
+  } catch (checkError) {
+    console.warn('yt-dlp check failed, using ytdl-core:', checkError.message);
+  }
+  
+  // ytdl-core 사용 (fallback)
   return new Promise((resolve, reject) => {
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    
     let stream;
     let streamError = null;
     
     try {
-      // 오디오 스트림 생성
-      stream = ytdl(videoUrl, {
-        quality: 'highestaudio',
-        filter: 'audioonly',
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      // 오디오 스트림 생성 (ytdl-core 시도)
+      try {
+        stream = ytdl(videoUrl, {
+          quality: 'highestaudio',
+          filter: 'audioonly',
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
           }
+        });
+      } catch (ytdlError) {
+        // ytdl-core 실패 시 @distube/ytdl-core 시도
+        console.log('ytdl-core failed, trying @distube/ytdl-core...');
+        console.log('Error:', ytdlError.message);
+        
+        try {
+          stream = ytdlDistube(videoUrl, {
+            quality: 'highestaudio',
+            filter: 'audioonly',
+            requestOptions: {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+              }
+            }
+          });
+          console.log('Using @distube/ytdl-core');
+        } catch (distubeError) {
+          // 모든 방법 실패 시 yt-dlp 재시도
+          console.error('All ytdl methods failed, trying yt-dlp as last resort...');
+          checkYtdlpAvailable().then(ytdlpCheck => {
+            if (ytdlpCheck.available) {
+              downloadAudioWithYtdlp(videoId, startTime, endTime)
+                .then(resolve)
+                .catch(reject);
+            } else {
+              reject(new Error(`All download methods failed. ytdl-core: ${ytdlError.message}, distube: ${distubeError.message}, yt-dlp: not available`));
+            }
+          }).catch(() => {
+            reject(new Error(`All download methods failed. ytdl-core: ${ytdlError.message}, distube: ${distubeError.message}`));
+          });
+          return;
         }
-      });
+      }
       
       // 스트림 에러 핸들링
       stream.on('error', (err) => {
@@ -74,7 +128,23 @@ export async function downloadAudio(videoId, startTime = null, endTime = null) {
           errorMessage = `YouTube 비디오를 찾을 수 없습니다 (404 Not Found).`;
         }
         
-        reject(new Error(errorMessage));
+        // yt-dlp로 재시도
+        console.log('Stream error, trying yt-dlp as fallback...');
+        checkYtdlpAvailable().then(ytdlpCheck => {
+          if (ytdlpCheck.available) {
+            console.log('yt-dlp is available, using it as fallback...');
+            downloadAudioWithYtdlp(videoId, startTime, endTime)
+              .then(resolve)
+              .catch(ytdlpError => {
+                console.error('yt-dlp also failed:', ytdlpError.message);
+                reject(new Error(`${errorMessage} (yt-dlp fallback also failed: ${ytdlpError.message})`));
+              });
+          } else {
+            reject(new Error(errorMessage));
+          }
+        }).catch(() => {
+          reject(new Error(errorMessage));
+        });
       });
       
       let ffmpegCommand = ffmpeg(stream)

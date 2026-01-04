@@ -2,12 +2,17 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# 시스템 의존성 설치 (FFmpeg 등)
+# 시스템 의존성 설치 (FFmpeg, yt-dlp 등)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
+    python3-pip \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp 설치 (ytdl-core 대안)
+RUN pip3 install --no-cache-dir yt-dlp
 
 # package.json 복사 및 의존성 설치
 COPY package*.json ./
