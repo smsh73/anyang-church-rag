@@ -4,6 +4,20 @@
 
 const BASE_URL = process.env.API_URL || 'http://localhost:3000';
 
+// fetch 초기화
+let fetch;
+if (typeof globalThis.fetch === 'undefined') {
+  try {
+    const nodeFetch = await import('node-fetch');
+    fetch = nodeFetch.default;
+  } catch (e) {
+    console.error('node-fetch가 필요합니다: npm install node-fetch');
+    process.exit(1);
+  }
+} else {
+  fetch = globalThis.fetch;
+}
+
 async function testEndpoint(method, path, body = null) {
   try {
     const options = {
@@ -16,7 +30,14 @@ async function testEndpoint(method, path, body = null) {
     }
     
     const response = await fetch(`${BASE_URL}${path}`, options);
-    const data = await response.json();
+    
+    let data;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
     
     return {
       status: response.status,
