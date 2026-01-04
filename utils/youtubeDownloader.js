@@ -20,19 +20,32 @@ fs.ensureDirSync(tempDir);
  * @returns {string} 비디오 ID
  */
 export function extractVideoId(url) {
+  if (!url || typeof url !== 'string') {
+    throw new Error('Invalid YouTube URL: URL is required');
+  }
+  
+  // URL 정규화 (공백 제거)
+  const normalizedUrl = url.trim();
+  
   const patterns = [
+    // 표준 YouTube URL
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-    /^([a-zA-Z0-9_-]{11})$/ // 직접 비디오 ID
+    // 짧은 URL
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    // 직접 비디오 ID (11자리)
+    /^([a-zA-Z0-9_-]{11})$/,
+    // URL에 포함된 비디오 ID
+    /[?&]v=([a-zA-Z0-9_-]{11})/
   ];
   
   for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) {
+    const match = normalizedUrl.match(pattern);
+    if (match && match[1] && match[1].length === 11) {
       return match[1];
     }
   }
   
-  throw new Error('Invalid YouTube URL');
+  throw new Error(`Invalid YouTube URL: Could not extract video ID from "${normalizedUrl}"`);
 }
 
 /**

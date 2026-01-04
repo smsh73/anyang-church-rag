@@ -21,22 +21,32 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
   
   try {
     // 방법 1: YouTube Data API를 사용한 자막 추출 (API 키가 있는 경우)
+    // YouTube Data API는 가장 안정적이므로 우선적으로 시도
     if (process.env.YOUTUBE_API_KEY) {
       console.log('Trying YouTube Data API for captions...');
-      const apiTranscript = await extractCaptionsWithAPI(videoId, startSeconds, endSeconds);
-      if (apiTranscript && apiTranscript.length > 0) {
-        transcript = apiTranscript;
-        method = 'youtube-api';
-        console.log(`✅ Captions extracted via YouTube Data API: ${transcript.length} segments`);
-        return {
-          success: true,
-          videoId,
-          method,
-          startTime: startSeconds,
-          endTime: endSeconds,
-          transcript
-        };
+      try {
+        const apiTranscript = await extractCaptionsWithAPI(videoId, startSeconds, endSeconds);
+        if (apiTranscript && apiTranscript.length > 0) {
+          transcript = apiTranscript;
+          method = 'youtube-api';
+          console.log(`✅ Captions extracted via YouTube Data API: ${transcript.length} segments`);
+          return {
+            success: true,
+            videoId,
+            method,
+            startTime: startSeconds,
+            endTime: endSeconds,
+            transcript
+          };
+        } else {
+          console.log('YouTube Data API: No captions found or empty result');
+        }
+      } catch (apiError) {
+        console.warn('YouTube Data API failed:', apiError.message);
+        // API 실패해도 다른 방법 시도
       }
+    } else {
+      console.log('YouTube Data API key not set. Skipping API method.');
     }
     
     // 방법 2: youtube-transcript 라이브러리 사용
@@ -81,15 +91,16 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
       // 오디오 다운로드 (여러 방법 시도)
       console.log(`Attempting to download audio for video ${videoId}...`);
       
-      // yt-dlp 사용 가능 여부 확인
-      const { checkYtdlpAvailable } = await import('../utils/youtubeDownloaderYtdlp.js');
+      // 오디오 다운로드: yt-dlp를 최우선으로 시도 (가장 안정적)
+      const { checkYtdlpAvailable, downloadAudioWithYtdlp } = await import('../utils/youtubeDownloaderYtdlp.js');
+      
+      // 1. yt-dlp 우선 시도 (가장 안정적)
       const ytdlpCheck = await checkYtdlpAvailable();
       console.log(`yt-dlp available: ${ytdlpCheck.available}`);
       
       if (ytdlpCheck.available) {
         try {
-          const { downloadAudioWithYtdlp } = await import('../utils/youtubeDownloaderYtdlp.js');
-          console.log('Trying yt-dlp for audio download...');
+          console.log('Trying yt-dlp for audio download (most reliable method)...');
           audioPath = await downloadAudioWithYtdlp(videoId, startSeconds, endSeconds);
           downloadMethod = 'yt-dlp';
           console.log(`✅ Audio downloaded via yt-dlp: ${audioPath}`);
@@ -97,14 +108,35 @@ export async function extractTranscript(url, startTime = null, endTime = null) {
           console.warn('yt-dlp failed:', ytdlpError.message);
           console.log('Falling back to ytdl-core...');
         }
+      } else {
+        console.log('yt-dlp not available, using ytdl-core...');
       }
       
-      // yt-dlp 실패 시 ytdl-core 시도
+      // 2. yt-dlp 실패 시 ytdl-core 시도
       if (!audioPath) {
-        console.log('Trying ytdl-core for audio download...');
-        audioPath = await downloadAudio(videoId, startSeconds, endSeconds);
-        downloadMethod = 'ytdl-core';
-        console.log(`✅ Audio downloaded via ytdl-core: ${audioPath}`);
+        try {
+          console.log('Trying ytdl-core for audio download...');
+          audioPath = await downloadAudio(videoId, startSeconds, endSeconds);
+          downloadMethod = 'ytdl-core';
+          console.log(`✅ Audio downloaded via ytdl-core: ${audioPath}`);
+        } catch (ytdlError) {
+          console.error('ytdl-core failed:', ytdlError.message);
+          
+          // 3. ytdl-core 실패 시 yt-dlp 재시도 (가능한 경우)
+          if (ytdlpCheck.available) {
+            console.log('Retrying with yt-dlp as last resort...');
+            try {
+              audioPath = await downloadAudioWithYtdlp(videoId, startSeconds, endSeconds);
+              downloadMethod = 'yt-dlp-retry';
+              console.log(`✅ Audio downloaded via yt-dlp (retry): ${audioPath}`);
+            } catch (retryError) {
+              console.error('yt-dlp retry also failed:', retryError.message);
+              throw new Error(`All download methods failed. ytdl-core: ${ytdlError.message}, yt-dlp: ${retryError.message}`);
+            }
+          } else {
+            throw ytdlError;
+          }
+        }
       }
       
       if (!audioPath) {
