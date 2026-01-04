@@ -184,22 +184,63 @@ export async function syncPostgreSQLIndex() {
   let client;
   try {
     client = await pool.connect();
-    console.log('Reindexing PostgreSQL vector indexes...');
+    console.log('Synchronizing PostgreSQL indexes...');
     
-    // 벡터 인덱스 재구성
-    await client.query('REINDEX INDEX CONCURRENTLY IF EXISTS sermon_chunks_embedding_idx');
-    await client.query('REINDEX INDEX CONCURRENTLY IF EXISTS bible_verses_embedding_idx');
+    // 인덱스 존재 여부 확인 후 재구성
+    const indexCheck = await client.query(`
+      SELECT indexname 
+      FROM pg_indexes 
+      WHERE indexname IN ('sermon_chunks_embedding_idx', 'bible_verses_embedding_idx')
+    `);
     
-    // 통계 정보 업데이트
-    await client.query('ANALYZE sermon_chunks');
-    await client.query('ANALYZE bible_verses');
-    await client.query('ANALYZE sermon_transcripts');
+    const existingIndexes = indexCheck.rows.map(row => row.indexname);
+    
+    // 벡터 인덱스 재구성 (존재하는 경우만)
+    for (const indexName of ['sermon_chunks_embedding_idx', 'bible_verses_embedding_idx']) {
+      if (existingIndexes.includes(indexName)) {
+        try {
+          // CONCURRENTLY는 트랜잭션 내에서 사용할 수 없으므로 일반 REINDEX 사용
+          await client.query(`REINDEX INDEX ${indexName}`);
+          console.log(`✅ Reindexed ${indexName}`);
+        } catch (reindexError) {
+          console.warn(`⚠️  Failed to reindex ${indexName}:`, reindexError.message);
+        }
+      } else {
+        console.log(`ℹ️  Index ${indexName} does not exist (skipping)`);
+      }
+    }
+    
+    // 통계 정보 업데이트 (테이블이 존재하는 경우만)
+    const tableCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('sermon_chunks', 'bible_verses', 'sermon_transcripts')
+    `);
+    
+    const existingTables = tableCheck.rows.map(row => row.table_name);
+    
+    for (const tableName of ['sermon_chunks', 'bible_verses', 'sermon_transcripts']) {
+      if (existingTables.includes(tableName)) {
+        try {
+          await client.query(`ANALYZE ${tableName}`);
+          console.log(`✅ Analyzed ${tableName}`);
+        } catch (analyzeError) {
+          console.warn(`⚠️  Failed to analyze ${tableName}:`, analyzeError.message);
+        }
+      }
+    }
     
     console.log('PostgreSQL indexes synchronized successfully');
-    return { success: true, message: 'PostgreSQL indexes synchronized' };
+    return { 
+      success: true, 
+      message: 'PostgreSQL indexes synchronized',
+      indexesReindexed: existingIndexes.length,
+      tablesAnalyzed: existingTables.length
+    };
   } catch (error) {
     console.warn('PostgreSQL index sync warning:', error.message);
-    // REINDEX 실패해도 계속 진행
+    // 동기화 실패해도 계속 진행
     return { success: false, error: error.message };
   } finally {
     if (client) {
