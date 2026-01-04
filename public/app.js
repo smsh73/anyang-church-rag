@@ -134,12 +134,59 @@ document.getElementById('embedding-form').addEventListener('submit', async (e) =
         progressText.textContent = '오류 발생';
         result.classList.remove('hidden');
         result.className = 'result error';
-        result.innerHTML = `
+        
+        // 에러 메시지 파싱 (개행 문자 처리)
+        let errorMessage = error.message || '알 수 없는 오류가 발생했습니다.';
+        const errorLines = errorMessage.split('\n');
+        const mainError = errorLines[0];
+        const suggestions = errorLines.slice(1).filter(line => line.trim().startsWith('해결 방법:') || line.trim().startsWith('1.') || line.trim().startsWith('2.') || line.trim().startsWith('3.'));
+        
+        let errorHTML = `
             <h3>❌ 오류 발생</h3>
-            <p><strong>오류 메시지:</strong> ${error.message}</p>
-            <p><small>자세한 내용은 브라우저 콘솔을 확인하세요.</small></p>
+            <p><strong>오류 메시지:</strong> ${mainError}</p>
         `;
+        
+        // 해결 방법이 있으면 표시
+        if (suggestions.length > 0) {
+            errorHTML += `
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
+                    <strong>💡 해결 방법:</strong>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        ${suggestions.map(s => `<li>${s.replace(/^\d+\.\s*/, '')}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        // YouTube Data API 키 관련 안내
+        if (errorMessage.includes('다운로드') || errorMessage.includes('410') || errorMessage.includes('403')) {
+            errorHTML += `
+                <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                    <strong>📌 YouTube Data API 키 설정 (권장):</strong>
+                    <p style="margin: 5px 0;">YouTube Data API 키를 설정하면 더 안정적으로 자막을 가져올 수 있습니다.</p>
+                    <ol style="margin: 5px 0; padding-left: 20px;">
+                        <li>Google Cloud Console에서 API 키 생성</li>
+                        <li>YouTube Data API v3 활성화</li>
+                        <li>Azure App Service에 YOUTUBE_API_KEY 환경 변수 설정</li>
+                    </ol>
+                    <p style="margin: 5px 0; font-size: 0.9em; color: #666;">
+                        자세한 내용은 <a href="YOUTUBE_API_SETUP.md" target="_blank">YOUTUBE_API_SETUP.md</a>를 참고하세요.
+                    </p>
+                </div>
+            `;
+        }
+        
+        errorHTML += `
+            <p style="margin-top: 15px;"><small>자세한 내용은 브라우저 콘솔 또는 서버 로그를 확인하세요.</small></p>
+        `;
+        
+        result.innerHTML = errorHTML;
         console.error('벡터 임베딩 오류:', error);
+        console.error('에러 상세:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
     } finally {
         submitBtn.disabled = false;
         setTimeout(() => {
