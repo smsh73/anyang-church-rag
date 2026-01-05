@@ -12,6 +12,7 @@ import podcastRouter from './routes/podcast.js';
 import imageRouter from './routes/image.js';
 import sermonRouter from './routes/sermon.js';
 import syncRouter from './routes/sync.js';
+import batchRouter from './routes/batch.js';
 import { initializeDatabase } from './config/database.js';
 
 dotenv.config();
@@ -73,6 +74,7 @@ app.use('/api/podcast', podcastRouter);
 app.use('/api/image', imageRouter);
 app.use('/api/sermon', sermonRouter);
 app.use('/api/sync', syncRouter);
+app.use('/api/batch', batchRouter);
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -133,6 +135,12 @@ app.get('/api', (req, res) => {
       sync: {
         sync: 'POST /api/sync',
         status: 'GET /api/sync/status'
+      },
+      batch: {
+        channel: 'POST /api/batch/channel',
+        playlist: 'POST /api/batch/playlist',
+        channelSync: 'POST /api/batch/channel/sync',
+        playlistSync: 'POST /api/batch/playlist/sync'
       }
     }
   });

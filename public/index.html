@@ -12,6 +12,7 @@
             <h1>안양제일교회 YouTube RAG 시스템</h1>
             <nav>
                 <button class="nav-btn active" data-page="embedding">벡터 임베딩</button>
+                <button class="nav-btn" data-page="batch">배치 처리</button>
                 <button class="nav-btn" data-page="settings">API 키 설정</button>
                 <button class="nav-btn" data-page="status">상태 확인</button>
             </nav>
@@ -113,6 +114,103 @@
                         </div>
                     </form>
                 </div>
+            </div>
+        </div>
+
+        <!-- 배치 처리 페이지 -->
+        <div id="batch-page" class="page">
+            <h2>배치 처리</h2>
+            
+            <div class="settings-section">
+                <h3>채널 배치 처리</h3>
+                <form id="batch-channel-form">
+                    <div class="form-group">
+                        <label for="channel-url">채널 URL *</label>
+                        <input type="url" id="channel-url" required 
+                               placeholder="https://www.youtube.com/@channelname 또는 https://www.youtube.com/channel/UCxxxxx">
+                        <small>지원 형식: @channelname, /channel/UCxxxxx, /c/channelname, /user/username</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="channel-keyword">키워드 필터 (선택)</label>
+                        <input type="text" id="channel-keyword" 
+                               placeholder="예: 주일예배, 설교">
+                        <small>제목 또는 설명에 키워드가 포함된 동영상만 처리</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="channel-max-videos">최대 동영상 수 (선택)</label>
+                        <input type="number" id="channel-max-videos" min="1" 
+                               placeholder="예: 10">
+                        <small>비워두면 모든 동영상 처리</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="channel-auto-index">
+                            Azure AI Search에 자동 인덱싱
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="batch-channel-btn">
+                        채널 배치 처리 시작
+                    </button>
+                </form>
+                
+                <div id="batch-channel-progress" class="progress hidden" style="margin-top: 20px;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="batch-channel-progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="batch-channel-progress-text">처리 중...</div>
+                </div>
+                
+                <div id="batch-channel-result" class="result hidden"></div>
+            </div>
+            
+            <div class="settings-section" style="margin-top: 30px;">
+                <h3>재생목록 배치 처리</h3>
+                <form id="batch-playlist-form">
+                    <div class="form-group">
+                        <label for="playlist-url">재생목록 URL *</label>
+                        <input type="url" id="playlist-url" required 
+                               placeholder="https://www.youtube.com/playlist?list=PLxxxxx">
+                        <small>재생목록 URL 또는 재생목록 ID</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="playlist-keyword">키워드 필터 (선택)</label>
+                        <input type="text" id="playlist-keyword" 
+                               placeholder="예: 주일예배, 설교">
+                        <small>제목 또는 설명에 키워드가 포함된 동영상만 처리</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="playlist-max-videos">최대 동영상 수 (선택)</label>
+                        <input type="number" id="playlist-max-videos" min="1" 
+                               placeholder="예: 20">
+                        <small>비워두면 모든 동영상 처리</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="playlist-auto-index">
+                            Azure AI Search에 자동 인덱싱
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="batch-playlist-btn">
+                        재생목록 배치 처리 시작
+                    </button>
+                </form>
+                
+                <div id="batch-playlist-progress" class="progress hidden" style="margin-top: 20px;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="batch-playlist-progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="batch-playlist-progress-text">처리 중...</div>
+                </div>
+                
+                <div id="batch-playlist-result" class="result hidden"></div>
             </div>
         </div>
 

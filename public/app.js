@@ -420,3 +420,201 @@ document.querySelector('[data-page="settings"]').addEventListener('click', loadA
 // 전역 함수로 노출
 window.toggleApiKey = toggleApiKey;
 window.deleteApiKey = deleteApiKey;
+
+// 배치 처리 - 채널
+document.getElementById('batch-channel-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const channelUrl = document.getElementById('channel-url').value;
+    const keyword = document.getElementById('channel-keyword').value.trim() || null;
+    const maxVideos = document.getElementById('channel-max-videos').value ? parseInt(document.getElementById('channel-max-videos').value) : null;
+    const autoIndex = document.getElementById('channel-auto-index').checked;
+    
+    const submitBtn = document.getElementById('batch-channel-btn');
+    const progress = document.getElementById('batch-channel-progress');
+    const progressFill = document.getElementById('batch-channel-progress-fill');
+    const progressText = document.getElementById('batch-channel-progress-text');
+    const result = document.getElementById('batch-channel-result');
+    
+    submitBtn.disabled = true;
+    progress.classList.remove('hidden');
+    result.classList.add('hidden');
+    progressFill.style.width = '0%';
+    progressText.textContent = '채널 동영상 목록 가져오는 중...';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/batch/channel/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channelUrl,
+                keyword,
+                maxVideos,
+                autoIndex,
+                delayBetweenVideos: 5000
+            })
+        });
+        
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch (e) {
+                // JSON 파싱 실패
+            }
+            throw new Error(errorMessage);
+        }
+        
+        const data = await response.json();
+        
+        progressFill.style.width = '100%';
+        progressText.textContent = '완료!';
+        
+        if (data.success) {
+            result.classList.remove('hidden');
+            result.className = 'result success';
+            result.innerHTML = `
+                <h3>✅ 채널 배치 처리 완료</h3>
+                <p><strong>총 동영상:</strong> ${data.total}개</p>
+                <p><strong>성공:</strong> ${data.processed}개</p>
+                <p><strong>실패:</strong> ${data.failed}개</p>
+                ${data.results && data.results.length > 0 ? `
+                    <details>
+                        <summary>처리 결과 상세 (${data.results.length}개)</summary>
+                        <div style="max-height: 400px; overflow-y: auto; margin-top: 10px;">
+                            ${data.results.map((r, i) => `
+                                <div style="padding: 10px; margin: 5px 0; border-left: 3px solid ${r.success ? '#27ae60' : '#e74c3c'}; background: #f8f9fa;">
+                                    <strong>${i + 1}. ${r.title || r.videoId}</strong>
+                                    ${r.success ? `
+                                        <p style="margin: 5px 0; color: #27ae60;">✅ 성공</p>
+                                        <small>청크: ${r.stats?.totalChunks || 0}개, 문단: ${r.stats?.totalParagraphs || 0}개</small>
+                                    ` : `
+                                        <p style="margin: 5px 0; color: #e74c3c;">❌ 실패: ${r.error || '알 수 없는 오류'}</p>
+                                    `}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </details>
+                ` : ''}
+            `;
+        } else {
+            throw new Error(data.error || '처리 실패');
+        }
+    } catch (error) {
+        progressFill.style.width = '0%';
+        progressText.textContent = '오류 발생';
+        result.classList.remove('hidden');
+        result.className = 'result error';
+        result.innerHTML = `
+            <h3>❌ 오류 발생</h3>
+            <p><strong>오류 메시지:</strong> ${error.message}</p>
+            <p style="margin-top: 15px;"><small>자세한 내용은 브라우저 콘솔 또는 서버 로그를 확인하세요.</small></p>
+        `;
+        console.error('채널 배치 처리 오류:', error);
+    } finally {
+        submitBtn.disabled = false;
+        setTimeout(() => {
+            progress.classList.add('hidden');
+        }, 2000);
+    }
+});
+
+// 배치 처리 - 재생목록
+document.getElementById('batch-playlist-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const playlistUrl = document.getElementById('playlist-url').value;
+    const keyword = document.getElementById('playlist-keyword').value.trim() || null;
+    const maxVideos = document.getElementById('playlist-max-videos').value ? parseInt(document.getElementById('playlist-max-videos').value) : null;
+    const autoIndex = document.getElementById('playlist-auto-index').checked;
+    
+    const submitBtn = document.getElementById('batch-playlist-btn');
+    const progress = document.getElementById('batch-playlist-progress');
+    const progressFill = document.getElementById('batch-playlist-progress-fill');
+    const progressText = document.getElementById('batch-playlist-progress-text');
+    const result = document.getElementById('batch-playlist-result');
+    
+    submitBtn.disabled = true;
+    progress.classList.remove('hidden');
+    result.classList.add('hidden');
+    progressFill.style.width = '0%';
+    progressText.textContent = '재생목록 동영상 목록 가져오는 중...';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/batch/playlist/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                playlistUrl,
+                keyword,
+                maxVideos,
+                autoIndex,
+                delayBetweenVideos: 5000
+            })
+        });
+        
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch (e) {
+                // JSON 파싱 실패
+            }
+            throw new Error(errorMessage);
+        }
+        
+        const data = await response.json();
+        
+        progressFill.style.width = '100%';
+        progressText.textContent = '완료!';
+        
+        if (data.success) {
+            result.classList.remove('hidden');
+            result.className = 'result success';
+            result.innerHTML = `
+                <h3>✅ 재생목록 배치 처리 완료</h3>
+                <p><strong>총 동영상:</strong> ${data.total}개</p>
+                <p><strong>성공:</strong> ${data.processed}개</p>
+                <p><strong>실패:</strong> ${data.failed}개</p>
+                ${data.results && data.results.length > 0 ? `
+                    <details>
+                        <summary>처리 결과 상세 (${data.results.length}개)</summary>
+                        <div style="max-height: 400px; overflow-y: auto; margin-top: 10px;">
+                            ${data.results.map((r, i) => `
+                                <div style="padding: 10px; margin: 5px 0; border-left: 3px solid ${r.success ? '#27ae60' : '#e74c3c'}; background: #f8f9fa;">
+                                    <strong>${i + 1}. ${r.title || r.videoId}</strong>
+                                    ${r.success ? `
+                                        <p style="margin: 5px 0; color: #27ae60;">✅ 성공</p>
+                                        <small>청크: ${r.stats?.totalChunks || 0}개, 문단: ${r.stats?.totalParagraphs || 0}개</small>
+                                    ` : `
+                                        <p style="margin: 5px 0; color: #e74c3c;">❌ 실패: ${r.error || '알 수 없는 오류'}</p>
+                                    `}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </details>
+                ` : ''}
+            `;
+        } else {
+            throw new Error(data.error || '처리 실패');
+        }
+    } catch (error) {
+        progressFill.style.width = '0%';
+        progressText.textContent = '오류 발생';
+        result.classList.remove('hidden');
+        result.className = 'result error';
+        result.innerHTML = `
+            <h3>❌ 오류 발생</h3>
+            <p><strong>오류 메시지:</strong> ${error.message}</p>
+            <p style="margin-top: 15px;"><small>자세한 내용은 브라우저 콘솔 또는 서버 로그를 확인하세요.</small></p>
+        `;
+        console.error('재생목록 배치 처리 오류:', error);
+    } finally {
+        submitBtn.disabled = false;
+        setTimeout(() => {
+            progress.classList.add('hidden');
+        }, 2000);
+    }
+});
