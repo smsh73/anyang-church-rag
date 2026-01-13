@@ -279,7 +279,13 @@ async function deleteApiKey(id) {
 
 // API 키 추가 모달
 document.getElementById('add-key-btn').addEventListener('click', () => {
-    document.getElementById('add-key-modal').classList.remove('hidden');
+    const modal = document.getElementById('add-key-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        console.log('모달 열림:', modal);
+    } else {
+        console.error('모달 요소를 찾을 수 없습니다');
+    }
 });
 
 document.querySelector('.close').addEventListener('click', () => {

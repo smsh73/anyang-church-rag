@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     build-essential \
     curl \
+    libvips-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp 설치 (ytdl-core 대안)
